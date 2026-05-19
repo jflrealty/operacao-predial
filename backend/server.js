@@ -23,7 +23,7 @@ const pool = new Pool({
 // ── MIDDLEWARE ────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../frontend')));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ── AUTH MIDDLEWARE ───────────────────────────────────────────
 function auth(req, res, next) {
@@ -418,7 +418,7 @@ app.get('/api/stats', auth, comPredio, async (req, res) => {
 
 // ── SPA FALLBACK ──────────────────────────────────────────────
 app.get('*', (_, res) =>
-  res.sendFile(path.join(__dirname, '../frontend/index.html'))
+  res.sendFile(path.join(__dirname, 'public/index.html'))
 );
 
 // ── AUTO-MIGRATE + SEED ───────────────────────────────────────
