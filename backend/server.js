@@ -421,4 +421,128 @@ app.get('*', (_, res) =>
   res.sendFile(path.join(__dirname, '../frontend/index.html'))
 );
 
-app.listen(PORT, () => console.log(`✅ Porta ${PORT}`));
+// ── AUTO-MIGRATE + SEED ───────────────────────────────────────
+async function migrate() {
+  const client = await pool.connect();
+  try {
+    console.log('🔄 Verificando banco de dados...');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS predios (
+        id        SERIAL PRIMARY KEY,
+        nome      TEXT NOT NULL,
+        slug      TEXT NOT NULL UNIQUE,
+        ativo     BOOLEAN DEFAULT TRUE,
+        criado_em TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS usuarios (
+        id         SERIAL PRIMARY KEY,
+        nome       TEXT NOT NULL,
+        email      TEXT NOT NULL UNIQUE,
+        senha_hash TEXT NOT NULL,
+        cargo      TEXT,
+        role       TEXT NOT NULL DEFAULT 'membro'
+                     CHECK (role IN ('superadmin','admin','membro')),
+        ativo      BOOLEAN DEFAULT TRUE,
+        criado_em  TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS usuario_predios (
+        usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        predio_id  INTEGER NOT NULL REFERENCES predios(id)  ON DELETE CASCADE,
+        PRIMARY KEY (usuario_id, predio_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS tickets (
+        id               SERIAL PRIMARY KEY,
+        predio_id        INTEGER NOT NULL REFERENCES predios(id) ON DELETE CASCADE,
+        titulo           TEXT NOT NULL,
+        descricao        TEXT,
+        categoria        TEXT,
+        local            TEXT,
+        origem           TEXT,
+        prioridade       TEXT NOT NULL DEFAULT 'Média'
+                           CHECK (prioridade IN ('Baixa','Média','Alta')),
+        status           TEXT NOT NULL DEFAULT 'aberto'
+                           CHECK (status IN ('aberto','em andamento','feedback ao cliente','resolvido')),
+        autor_id         INTEGER REFERENCES usuarios(id),
+        autor_nome       TEXT,
+        responsavel_id   INTEGER REFERENCES usuarios(id),
+        responsavel_nome TEXT,
+        prazo            DATE,
+        criado_em        TIMESTAMPTZ DEFAULT NOW(),
+        atualizado_em    TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS ticket_historico (
+        id         SERIAL PRIMARY KEY,
+        ticket_id  INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+        mensagem   TEXT NOT NULL,
+        autor_id   INTEGER REFERENCES usuarios(id),
+        autor_nome TEXT,
+        criado_em  TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS ticket_atividades (
+        id               SERIAL PRIMARY KEY,
+        ticket_id        INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+        titulo           TEXT NOT NULL,
+        status           TEXT NOT NULL DEFAULT 'pendente'
+                           CHECK (status IN ('pendente','concluida')),
+        responsavel_nome TEXT,
+        prazo            DATE,
+        criado_por       TEXT,
+        criado_em        TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Índices (ignora se já existem)
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_tickets_predio_status   ON tickets (predio_id, status);
+      CREATE INDEX IF NOT EXISTS idx_tickets_predio_prio     ON tickets (predio_id, prioridade);
+      CREATE INDEX IF NOT EXISTS idx_tickets_predio_prazo    ON tickets (predio_id, prazo);
+      CREATE INDEX IF NOT EXISTS idx_historico_ticket        ON ticket_historico (ticket_id);
+      CREATE INDEX IF NOT EXISTS idx_atividades_ticket       ON ticket_atividades (ticket_id);
+      CREATE INDEX IF NOT EXISTS idx_usuario_predios_uid     ON usuario_predios (usuario_id);
+      CREATE INDEX IF NOT EXISTS idx_usuario_predios_pid     ON usuario_predios (predio_id);
+    `);
+
+    // Seed: prédio JML + superadmin (só se não existirem)
+    const { rows: predioRows } = await client.query(
+      "SELECT id FROM predios WHERE slug='jml'"
+    );
+    if (!predioRows.length) {
+      await client.query(
+        "INSERT INTO predios (nome, slug) VALUES ('JML', 'jml')"
+      );
+      console.log('🏢 Prédio JML criado');
+    }
+
+    const { rows: adminRows } = await client.query(
+      "SELECT id FROM usuarios WHERE email='admin@operacao.com'"
+    );
+    if (!adminRows.length) {
+      // Senha: admin123
+      const hash = await bcrypt.hash('admin123', 10);
+      await client.query(
+        `INSERT INTO usuarios (nome, email, senha_hash, cargo, role)
+         VALUES ('Administrador', 'admin@operacao.com', $1, 'TI', 'superadmin')`,
+        [hash]
+      );
+      console.log('👤 Superadmin criado — admin@operacao.com / admin123');
+    }
+
+    console.log('✅ Banco pronto');
+  } catch (e) {
+    console.error('❌ Erro na migração:', e.message);
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// ── START ─────────────────────────────────────────────────────
+migrate()
+  .then(() => app.listen(PORT, () => console.log(`🚀 Servidor na porta ${PORT}`)))
+  .catch(e => { console.error('Falha fatal:', e.message); process.exit(1); });
