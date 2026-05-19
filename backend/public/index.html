@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Operação Predial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#F7F6F2; --surface:#FFFFFF; --surface2:#F0EEE8;
+  --border:#E2DED6; --border2:#C8C4BC;
+  --text:#1A1917; --text2:#6B6860; --text3:#A09D98;
+  --accent:#1A1917; --accent-fg:#FFFFFF;
+  --red:#C0392B; --red-bg:#FDF0EE;
+  --amber:#92590A; --amber-bg:#FDF5E6;
+  --green:#1E6B3C; --green-bg:#EBF5EE;
+  --blue:#1A4F8A; --blue-bg:#EBF0F9;
+  --purple:#6B21A8; --purple-bg:#F3EBFA;
+  --radius:10px; --radius-lg:14px;
+  --font:'DM Sans',sans-serif; --mono:'DM Mono',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;line-height:1.5;}
+
+/* ── FIELDS ── */
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:11px;font-weight:600;color:var(--text2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.07em;}
+.field input,.field select,.field textarea{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:var(--font);background:var(--surface);color:var(--text);outline:none;transition:border-color .15s;appearance:none;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--border2);}
+.field textarea{resize:vertical;min-height:80px;}
+.field input[readonly]{background:var(--surface2);color:var(--text2);}
+
+/* ── BUTTONS ── */
+.btn{padding:11px 20px;border-radius:var(--radius);font-size:14px;font-weight:500;font-family:var(--font);cursor:pointer;border:none;transition:opacity .15s,transform .1s;}
+.btn:active{transform:scale(.98);}
+.btn-primary{background:var(--accent);color:var(--accent-fg);width:100%;}
+.btn-primary:hover{opacity:.88;}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--text2);}
+.btn-ghost:hover{border-color:var(--border2);color:var(--text);}
+.btn-sm{padding:7px 14px;font-size:13px;}
+.btn-danger{background:var(--red-bg);color:var(--red);border:1px solid transparent;}
+.msg-error{font-size:13px;color:var(--red);margin-top:10px;text-align:center;}
+.msg-ok{font-size:13px;color:var(--green);margin-top:10px;text-align:center;}
+
+/* ── CENTER WRAPPER ── */
+.center-page{display:none;min-height:100vh;background:var(--bg);align-items:center;justify-content:center;padding:24px;}
+.center-page.active{display:flex;}
+.auth-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:40px 32px;max-width:400px;width:100%;}
+.auth-logo{font-size:22px;font-weight:600;margin-bottom:4px;letter-spacing:-.02em;}
+.auth-sub{font-size:14px;color:var(--text2);margin-bottom:32px;}
+
+/* ── SELEÇÃO DE PRÉDIO ── */
+.predio-grid{display:flex;flex-direction:column;gap:10px;margin-bottom:20px;}
+.predio-btn{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 18px;border-radius:var(--radius-lg);
+  border:1.5px solid var(--border);background:var(--surface);
+  font-family:var(--font);font-size:15px;font-weight:500;
+  color:var(--text);cursor:pointer;transition:all .15s;text-align:left;
+}
+.predio-btn:hover{border-color:var(--border2);background:var(--surface2);}
+.predio-btn svg{width:18px;height:18px;stroke:var(--text3);stroke-width:1.5;flex-shrink:0;}
+.predio-slug{font-size:12px;font-family:var(--mono);color:var(--text3);margin-top:2px;}
+
+/* ── APP ── */
+#app{display:none;}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:stretch;justify-content:space-between;position:sticky;top:0;z-index:50;height:56px;}
+.topbar-left{display:flex;align-items:center;gap:14px;}
+.topbar-brand{font-size:15px;font-weight:600;letter-spacing:-.01em;}
+.predio-switcher{
+  display:flex;align-items:center;gap:6px;padding:5px 10px;
+  border-radius:var(--radius);border:1px solid var(--border);
+  background:var(--surface2);font-size:13px;font-weight:500;
+  color:var(--text);cursor:pointer;font-family:var(--font);transition:all .12s;
+}
+.predio-switcher:hover{border-color:var(--border2);}
+.predio-switcher svg{width:14px;height:14px;stroke:var(--text2);stroke-width:2;}
+.topbar-right{display:flex;align-items:center;gap:8px;}
+.topbar-user{font-size:12px;color:var(--text2);}
+
+@media(min-width:768px){
+  .layout{display:flex;min-height:calc(100vh - 56px);}
+  .sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:20px 12px;position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto;}
+  .main-content{flex:1;padding:28px;max-width:920px;}
+  .bottom-tabs{display:none;}
+  .fab{display:none;}
+}
+@media(max-width:767px){
+  .sidebar{display:none;}
+  .main-content{padding:16px;padding-bottom:110px;}
+  .layout{display:block;}
+  .bottom-tabs{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);display:flex;z-index:50;padding-bottom:env(safe-area-inset-bottom);}
+  .bottom-tab{flex:1;padding:10px 4px 8px;border:none;background:none;font-size:11px;font-family:var(--font);color:var(--text2);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .15s;}
+  .bottom-tab svg{width:22px;height:22px;stroke-width:1.5;}
+  .bottom-tab.active{color:var(--accent);}
+  .fab{position:fixed;bottom:76px;right:20px;width:52px;height:52px;border-radius:50%;background:var(--accent);color:var(--accent-fg);border:none;font-size:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.2);z-index:49;}
+}
+
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius);font-size:14px;color:var(--text2);cursor:pointer;margin-bottom:2px;transition:background .12s,color .12s;border:none;background:none;font-family:var(--font);width:100%;text-align:left;}
+.nav-item:hover{background:var(--surface2);color:var(--text);}
+.nav-item.active{background:var(--surface2);color:var(--text);font-weight:500;}
+.nav-item svg{width:18px;height:18px;flex-shrink:0;stroke-width:1.75;}
+.nav-section{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;padding:16px 12px 6px;}
+
+.screen{display:none;}
+.screen.active{display:block;}
+
+/* ── STATS ── */
+.stats-row{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:28px;}
+@media(min-width:640px){.stats-row{grid-template-columns:repeat(4,1fr);}}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;}
+.stat-label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;}
+.stat-value{font-size:32px;font-weight:600;line-height:1;letter-spacing:-.02em;}
+.stat-hint{font-size:12px;color:var(--text3);margin-top:4px;}
+.stat-red .stat-value{color:var(--red);}
+
+/* ── TICKET CARD ── */
+.ticket-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .1s;}
+.ticket-card:hover{border-color:var(--border2);box-shadow:0 2px 10px rgba(0,0,0,.06);transform:translateY(-1px);}
+.tc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;}
+.tc-title{font-size:14px;font-weight:500;line-height:1.4;flex:1;}
+.tc-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text2);}
+.tc-bottom{display:flex;align-items:center;justify-content:space-between;margin-top:10px;flex-wrap:wrap;gap:6px;}
+
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:500;white-space:nowrap;}
+.badge-aberto{background:var(--blue-bg);color:var(--blue);}
+.badge-andamento{background:var(--amber-bg);color:var(--amber);}
+.badge-resolvido{background:var(--green-bg);color:var(--green);}
+.badge-feedback{background:var(--purple-bg);color:var(--purple);}
+.prio-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0;}
+.prio-Alta{background:var(--red);}
+.prio-Média{background:var(--amber);}
+.prio-Baixa{background:var(--green);}
+
+.section-title{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.07em;margin:24px 0 12px;}
+.section-title:first-child{margin-top:0;}
+.filter-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:16px;scrollbar-width:none;}
+.filter-row::-webkit-scrollbar{display:none;}
+.chip{padding:6px 16px;border-radius:99px;font-size:13px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;white-space:nowrap;flex-shrink:0;font-family:var(--font);transition:all .12s;}
+.chip:hover{border-color:var(--border2);color:var(--text);}
+.chip.active{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);}
+.empty{text-align:center;padding:52px 20px;color:var(--text2);font-size:14px;}
+.empty svg{width:36px;height:36px;stroke:var(--text3);margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;}
+.loader{text-align:center;padding:40px;color:var(--text2);font-size:14px;}
+
+/* ── OVERLAY / DRAWER ── */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:flex-end;backdrop-filter:blur(2px);}
+@media(min-width:768px){.overlay{align-items:center;justify-content:center;}}
+.overlay.open{display:flex;}
+.drawer{background:var(--surface);width:100%;max-height:92vh;overflow-y:auto;border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding-bottom:32px;}
+@media(min-width:768px){.drawer{border-radius:var(--radius-lg);max-width:560px;max-height:88vh;}}
+.drawer-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:14px auto 20px;}
+@media(min-width:768px){.drawer-handle{display:none;}}
+.drawer-body{padding:0 22px;}
+.drawer-title{font-size:18px;font-weight:600;margin-bottom:20px;letter-spacing:-.01em;}
+
+/* ── DETAIL ── */
+.detail-id{font-family:var(--mono);font-size:12px;color:var(--text3);margin-bottom:4px;}
+.detail-title{font-size:18px;font-weight:600;line-height:1.4;letter-spacing:-.01em;}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0;}
+.detail-field .dl{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;}
+.detail-field .dv{font-size:14px;font-weight:500;}
+.divider{height:1px;background:var(--border);margin:18px 0;}
+.status-pills{display:flex;gap:8px;flex-wrap:wrap;}
+.status-pill{padding:6px 14px;border-radius:99px;font-size:13px;border:1px solid var(--border);background:none;font-family:var(--font);cursor:pointer;transition:all .15s;color:var(--text2);}
+.status-pill:hover{border-color:var(--border2);}
+.status-pill.sel-aberto{background:var(--blue-bg);color:var(--blue);border-color:transparent;}
+.status-pill.sel-andamento{background:var(--amber-bg);color:var(--amber);border-color:transparent;}
+.status-pill.sel-resolvido{background:var(--green-bg);color:var(--green);border-color:transparent;}
+.status-pill.sel-feedback{background:var(--purple-bg);color:var(--purple);border-color:transparent;}
+
+/* ── TIMELINE ── */
+.timeline{list-style:none;}
+.tl-item{display:flex;gap:12px;padding-bottom:16px;position:relative;}
+.tl-item:not(:last-child)::before{content:'';position:absolute;left:7px;top:18px;bottom:0;width:1px;background:var(--border);}
+.tl-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--border2);background:var(--surface);flex-shrink:0;margin-top:2px;}
+.tl-msg{font-size:13px;color:var(--text);}
+.tl-meta{font-size:12px;color:var(--text3);margin-top:2px;}
+.update-row{display:flex;gap:8px;margin-top:10px;}
+.update-row input{flex:1;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:var(--font);background:var(--surface);color:var(--text);outline:none;}
+.update-row input:focus{border-color:var(--border2);}
+
+/* ── TEAM ── */
+.member-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.member-name{font-size:14px;font-weight:500;}
+.member-meta{font-size:12px;color:var(--text2);margin-top:2px;}
+.info-box{background:var(--blue-bg);border:1px solid #C5D8F0;border-radius:var(--radius);padding:12px 14px;font-size:13px;color:var(--blue);margin-bottom:20px;line-height:1.6;}
+
+/* ── ACTIVITY ── */
+.activity-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;}
+.activity-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+.activity-title-text{font-size:13px;font-weight:500;flex:1;}
+.activity-meta{font-size:12px;color:var(--text2);margin-top:6px;display:flex;gap:10px;flex-wrap:wrap;}
+.activity-check{width:20px;height:20px;border-radius:5px;border:1.5px solid var(--border2);background:var(--surface);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.activity-check.done{background:var(--green);border-color:var(--green);}
+.activity-check.done::after{content:'✓';color:white;font-size:11px;font-weight:700;}
+
+/* ── PRÉDIOS ADMIN ── */
+.predio-admin-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.predio-admin-nome{font-size:14px;font-weight:500;}
+.predio-admin-slug{font-size:12px;font-family:var(--mono);color:var(--text3);margin-top:2px;}
+
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(16px);background:var(--accent);color:var(--accent-fg);padding:10px 22px;border-radius:99px;font-size:13px;font-weight:500;z-index:999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.15);}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+@media(min-width:768px){.toast{bottom:32px;}}
+
+/* ── MULTI SELECT CHECKBOXES ── */
+.check-list{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
+.check-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:border-color .12s;}
+.check-item:hover{border-color:var(--border2);}
+.check-item input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;}
+.check-item label{font-size:14px;cursor:pointer;flex:1;}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="page-login" class="center-page active">
+  <div class="auth-card">
+    <div class="auth-logo">⬡ Operação Predial</div>
+    <div class="auth-sub">Faça login para continuar</div>
+    <div class="field"><label>E-mail</label><input type="email" id="lp-email" autocomplete="email" onkeydown="if(event.key==='Enter')fazerLogin()"></div>
+    <div class="field"><label>Senha</label><input type="password" id="lp-pass" autocomplete="current-password" onkeydown="if(event.key==='Enter')fazerLogin()"></div>
+    <button class="btn btn-primary" onclick="fazerLogin()">Entrar</button>
+    <div id="lp-msg" style="margin-top:12px;font-size:13px;text-align:center;"></div>
+  </div>
+</div>
+
+<!-- SELEÇÃO DE PRÉDIO -->
+<div id="page-predio" class="center-page">
+  <div class="auth-card">
+    <div class="auth-logo">⬡ Operação Predial</div>
+    <div class="auth-sub" id="predio-sub">Olá! Selecione o prédio que deseja operar.</div>
+    <div class="predio-grid" id="predio-grid"></div>
+    <button class="btn btn-ghost btn-sm" style="width:100%;" onclick="fazerLogout()">Sair</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-brand">⬡ Op. Predial</div>
+      <button class="predio-switcher" onclick="showPredioSelector()" id="predio-switcher-btn">
+        <span id="predio-nome-ativo">—</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 16l5-5 5 5"/><path d="M7 8l5 5 5-5" opacity=".4"/></svg>
+      </button>
+    </div>
+    <div class="topbar-right">
+      <span class="topbar-user" id="app-user-label"></span>
+      <button class="btn btn-ghost btn-sm" onclick="showNewTicket()">+ Tíquete</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="nav-section">Visão</div>
+      <button class="nav-item active" onclick="showScreen('dashboard',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Dashboard
+      </button>
+      <button class="nav-item" onclick="showScreen('tickets',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+        Tíquetes
+      </button>
+      <div class="nav-section admin-only" style="display:none;">Admin</div>
+      <button class="nav-item admin-only" style="display:none;" onclick="showScreen('team',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        Time
+      </button>
+      <button class="nav-item superadmin-only" style="display:none;" onclick="showScreen('predios',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Prédios
+      </button>
+      <div class="nav-section">Conta</div>
+      <button class="nav-item" onclick="showPredioSelector()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 16l4-4m0 0l-4-4m4 4H7"/><path d="M7 4H5a2 2 0 00-2 2v12a2 2 0 002 2h2"/></svg>
+        Trocar prédio
+      </button>
+      <button class="nav-item" onclick="fazerLogout()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><line x1="19" y1="8" x2="23" y2="12"/><line x1="23" y1="8" x2="19" y2="12"/></svg>
+        Sair
+      </button>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main-content">
+
+      <!-- DASHBOARD -->
+      <div class="screen active" id="screen-dashboard">
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-label">Em aberto</div><div class="stat-value" id="s-aberto">—</div><div class="stat-hint">aguardando</div></div>
+          <div class="stat-card"><div class="stat-label">Em andamento</div><div class="stat-value" id="s-andamento">—</div><div class="stat-hint">em progresso</div></div>
+          <div class="stat-card"><div class="stat-label">Resolvidos</div><div class="stat-value" id="s-resolvido">—</div><div class="stat-hint">concluídos</div></div>
+          <div class="stat-card stat-red"><div class="stat-label">Prazo hoje</div><div class="stat-value" id="s-hoje">—</div><div class="stat-hint">vencem hoje</div></div>
+        </div>
+        <div class="section-title">🔴 Alta prioridade</div>
+        <div id="dash-alta"><div class="loader">Carregando...</div></div>
+        <div class="section-title" style="margin-top:32px;">⏰ Prazo hoje</div>
+        <div id="dash-hoje"><div class="loader">Carregando...</div></div>
+      </div>
+
+      <!-- TICKETS -->
+      <div class="screen" id="screen-tickets">
+        <div class="filter-row">
+          <button class="chip active" onclick="setFilter('todos',this)">Todos</button>
+          <button class="chip" onclick="setFilter('aberto',this)">Aberto</button>
+          <button class="chip" onclick="setFilter('em andamento',this)">Em andamento</button>
+          <button class="chip" onclick="setFilter('resolvido',this)">Resolvido</button>
+          <button class="chip" onclick="setFilter('feedback ao cliente',this)">Feedback</button>
+        </div>
+        <div id="ticket-list"><div class="loader">Carregando...</div></div>
+      </div>
+
+      <!-- TEAM -->
+      <div class="screen" id="screen-team">
+        <div class="info-box">👤 Membros vinculados a <strong id="team-predio-label">este prédio</strong>. Admins e superadmins acessam todos os prédios automaticamente.</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div class="section-title" style="margin:0;">Membros</div>
+          <button class="btn btn-ghost btn-sm" onclick="openAddMember()">+ Adicionar</button>
+        </div>
+        <div id="team-list"><div class="loader">Carregando...</div></div>
+      </div>
+
+      <!-- PRÉDIOS (superadmin) -->
+      <div class="screen" id="screen-predios">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div class="section-title" style="margin:0;">Prédios / Tenants</div>
+          <button class="btn btn-ghost btn-sm" onclick="openAddPredio()">+ Novo prédio</button>
+        </div>
+        <div id="predios-list"><div class="loader">Carregando...</div></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MOBILE TABS -->
+  <div class="bottom-tabs">
+    <button class="bottom-tab active" data-tab onclick="showScreen('dashboard',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Dashboard
+    </button>
+    <button class="bottom-tab" data-tab onclick="showScreen('tickets',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+      Tíquetes
+    </button>
+    <button class="bottom-tab admin-only" data-tab style="display:none;" onclick="showScreen('team',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+      Time
+    </button>
+  </div>
+  <button class="fab" onclick="showNewTicket()">+</button>
+</div>
+
+<!-- OVERLAY: TROCAR PRÉDIO (inline) -->
+<div class="overlay" id="overlay-predio" onclick="closeOverlay('overlay-predio',event)">
+  <div class="drawer" style="max-width:420px;">
+    <div class="drawer-handle"></div>
+    <div class="drawer-body">
+      <div class="drawer-title">Selecionar prédio</div>
+      <div class="predio-grid" id="switch-predio-grid"></div>
+      <button class="btn btn-ghost" style="width:100%;margin-top:4px;" onclick="closeOverlayById('overlay-predio')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- OVERLAY: NOVO TÍQUETE -->
+<div class="overlay" id="overlay-novo" onclick="closeOverlay('overlay-novo',event)">
+  <div class="drawer">
+    <div class="drawer-handle"></div>
+    <div class="drawer-body">
+      <div class="drawer-title">Abrir tíquete</div>
+      <div class="field"><label>Aberto por</label><input type="text" id="n-autor" readonly></div>
+      <div class="field"><label>Origem</label>
+        <select id="n-origem">
+          <option value="">Selecionar...</option>
+          <option>WhatsApp</option><option>Presencialmente</option>
+          <option>Identificação interna</option><option>E-mail</option>
+        </select>
+      </div>
+      <div class="field"><label>Categoria</label>
+        <select id="n-cat">
+          <option value="">Selecionar...</option>
+          <option>Manutenção</option><option>Limpeza / Governança</option>
+          <option>Portaria / Acesso</option><option>Internet / TV</option>
+          <option>Climatização / AC</option><option>Hidráulica</option>
+          <option>Elétrica</option><option>Solicitação de serviço</option>
+          <option>Reclamação</option><option>Outro</option>
+        </select>
+      </div>
+      <div class="field"><label>Descrição</label><textarea id="n-desc" placeholder="O que aconteceu?"></textarea></div>
+      <div class="field"><label>Local / Unidade</label><input type="text" id="n-local" placeholder="Apto 204, Área comum..."></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="field"><label>Prioridade</label>
+          <select id="n-prio"><option>Baixa</option><option selected>Média</option><option>Alta</option></select>
+        </div>
+        <div class="field"><label>Prazo previsto</label><input type="date" id="n-prazo"></div>
+      </div>
+      <div class="field"><label>Responsável</label><select id="n-resp"><option value="">A definir</option></select></div>
+      <button class="btn btn-primary" onclick="criarTicket()">Abrir tíquete</button>
+      <div id="n-msg" style="margin-top:10px;font-size:13px;text-align:center;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- OVERLAY: DETALHE -->
+<div class="overlay" id="overlay-detail" onclick="closeOverlay('overlay-detail',event)">
+  <div class="drawer">
+    <div class="drawer-handle"></div>
+    <div class="drawer-body" id="detail-body"></div>
+  </div>
+</div>
+
+<!-- OVERLAY: ADICIONAR MEMBRO -->
+<div class="overlay" id="overlay-member" onclick="closeOverlay('overlay-member',event)">
+  <div class="drawer">
+    <div class="drawer-handle"></div>
+    <div class="drawer-body">
+      <div class="drawer-title">Adicionar membro</div>
+      <div class="field"><label>Nome completo</label><input type="text" id="m-nome" placeholder="Carlos Silva"></div>
+      <div class="field"><label>Cargo / Setor</label><input type="text" id="m-cargo" placeholder="Manutenção"></div>
+      <div class="field"><label>E-mail</label><input type="email" id="m-email"></div>
+      <div class="field"><label>Senha inicial</label><input type="text" id="m-pass" placeholder="mínimo 6 caracteres"></div>
+      <div class="field"><label>Perfil</label>
+        <select id="m-role">
+          <option value="membro">Membro (operação)</option>
+          <option value="admin">Admin</option>
+          <option value="superadmin">Superadmin</option>
+        </select>
+      </div>
+      <div class="field" id="m-predios-field">
+        <label>Prédios com acesso</label>
+        <div class="check-list" id="m-predios-list"></div>
+        <div style="font-size:12px;color:var(--text2);">Admins e superadmins têm acesso a todos automaticamente.</div>
+      </div>
+      <button class="btn btn-primary" onclick="adicionarMembro()">Criar acesso</button>
+      <div id="m-msg" style="margin-top:10px;font-size:13px;text-align:center;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- OVERLAY: NOVO PRÉDIO -->
+<div class="overlay" id="overlay-predio-novo" onclick="closeOverlay('overlay-predio-novo',event)">
+  <div class="drawer">
+    <div class="drawer-handle"></div>
+    <div class="drawer-body">
+      <div class="drawer-title">Novo prédio</div>
+      <div class="field"><label>Nome do prédio</label><input type="text" id="np-nome" placeholder="Ex: Edifício Jardins"></div>
+      <div class="field"><label>Slug (identificador único)</label><input type="text" id="np-slug" placeholder="ex: jardins, torre-b"></div>
+      <button class="btn btn-primary" onclick="criarPredio()">Criar prédio</button>
+      <div id="np-msg" style="margin-top:10px;font-size:13px;text-align:center;"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════
+// ESTADO
+// ════════════════════════════════════════════════
+let token       = localStorage.getItem('op_token') || null;
+let currentUser = null;     // { id, nome, email, cargo, role, predios[] }
+let predioAtivo = null;     // { id, nome, slug }
+let allTickets  = [];
+let membersList = [];
+let allPredios  = [];
+let filterAtual = 'todos';
+const hoje = new Date().toISOString().split('T')[0];
+
+// ════════════════════════════════════════════════
+// HTTP
+// ════════════════════════════════════════════════
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (token)      opts.headers['Authorization']  = 'Bearer ' + token;
+  if (predioAtivo) opts.headers['x-predio-id']   = predioAtivo.id;
+  if (body)       opts.body = JSON.stringify(body);
+  const res  = await fetch(path, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.erro || 'Erro');
+  return data;
+}
+const GET   = p    => api('GET',    p);
+const POST  = (p,b)=> api('POST',   p, b);
+const PATCH = (p,b)=> api('PATCH',  p, b);
+const DEL   = p    => api('DELETE', p);
+
+// ════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════
+window.addEventListener('load', async () => {
+  if (!token) { showPage('login'); return; }
+  try {
+    const me = await api('GET', '/api/auth/me');
+    currentUser = me;
+    // Tenta restaurar prédio da sessão anterior
+    const savedId = parseInt(localStorage.getItem('op_predio_id'));
+    if (savedId && me.predios.find(p => p.id === savedId)) {
+      predioAtivo = me.predios.find(p => p.id === savedId);
+      entrarNoApp();
+    } else if (me.predios.length === 1) {
+      predioAtivo = me.predios[0];
+      entrarNoApp();
+    } else {
+      showPage('predio');
+      renderPredioGrid(me.predios, 'predio-grid');
+    }
+  } catch {
+    token = null;
+    localStorage.removeItem('op_token');
+    showPage('login');
+  }
+});
+
+// ════════════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════════════
+async function fazerLogin() {
+  const email = document.getElementById('lp-email').value.trim();
+  const senha = document.getElementById('lp-pass').value;
+  const msg   = document.getElementById('lp-msg');
+  if (!email || !senha) { msg.className='msg-error'; msg.textContent='Preencha e-mail e senha.'; return; }
+  msg.textContent='Entrando...'; msg.className='';
+  try {
+    const res = await fetch('/api/auth/login', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, senha })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro);
+    token       = data.token;
+    currentUser = { ...data.usuario, predios: data.predios };
+    localStorage.setItem('op_token', token);
+
+    if (data.predios.length === 0) {
+      msg.className='msg-error'; msg.textContent='Sem prédios vinculados. Contate o admin.'; return;
+    }
+    if (data.predios.length === 1) {
+      predioAtivo = data.predios[0];
+      entrarNoApp();
+    } else {
+      showPage('predio');
+      renderPredioGrid(data.predios, 'predio-grid');
+    }
+  } catch(e) {
+    msg.className='msg-error'; msg.textContent=e.message;
+  }
+}
+
+function renderPredioGrid(predios, containerId) {
+  document.getElementById('predio-sub') && (
+    document.getElementById('predio-sub').textContent =
+      `Olá, ${currentUser.nome.split(' ')[0]}! Selecione o prédio.`
+  );
+  document.getElementById(containerId).innerHTML = predios.map(p => `
+    <button class="predio-btn" onclick="selecionarPredio(${p.id},'${encodeURIComponent(p.nome)}','${p.slug}')">
+      <div>
+        <div>${p.nome}</div>
+        <div class="predio-slug">${p.slug}</div>
+      </div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 18l6-6-6-6"/></svg>
+    </button>`).join('');
+}
+
+function selecionarPredio(id, nomeEnc, slug) {
+  const nome = decodeURIComponent(nomeEnc);
+  predioAtivo = { id, nome, slug };
+  localStorage.setItem('op_predio_id', id);
+  closeOverlayById('overlay-predio');
+  entrarNoApp();
+}
+
+async function entrarNoApp() {
+  showPage('app');
+  document.getElementById('predio-nome-ativo').textContent = predioAtivo.nome;
+  document.getElementById('app-user-label').textContent =
+    `${currentUser.nome}${currentUser.cargo ? ' · '+currentUser.cargo : ''}`;
+  document.getElementById('team-predio-label').textContent = predioAtivo.nome;
+
+  // Mostra itens de admin/superadmin
+  const isAdmin = ['admin','superadmin'].includes(currentUser.role);
+  const isSuper = currentUser.role === 'superadmin';
+  document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdmin ? '' : 'none');
+  document.querySelectorAll('.superadmin-only').forEach(el => el.style.display = isSuper ? '' : 'none');
+
+  await Promise.all([loadStats(), loadTickets(), loadMembros(), isAdmin && loadAllPredios()]);
+  renderDashboard();
+  renderList();
+}
+
+function showPredioSelector() {
+  renderPredioGrid(currentUser.predios, 'switch-predio-grid');
+  document.getElementById('overlay-predio').classList.add('open');
+}
+
+function fazerLogout() {
+  token = null; currentUser = null; predioAtivo = null;
+  allTickets = []; membersList = []; allPredios = [];
+  localStorage.removeItem('op_token');
+  localStorage.removeItem('op_predio_id');
+  showPage('login');
+}
+
+// ════════════════════════════════════════════════
+// DATA
+// ════════════════════════════════════════════════
+let stats = {};
+async function loadStats()     { stats = await GET('/api/stats'); }
+async function loadTickets()   { allTickets = await GET('/api/tickets'); }
+async function loadMembros()   { membersList = await GET('/api/usuarios'); populateMemberSelect(); }
+async function loadAllPredios(){ allPredios  = await api('GET','/api/predios'); renderPrediosList(); }
+
+function populateMemberSelect() {
+  const el = document.getElementById('n-resp');
+  if (!el) return;
+  el.innerHTML = '<option value="">A definir</option>' +
+    membersList.map(m => `<option value="${m.id}">${m.nome}${m.cargo?' – '+m.cargo:''}</option>`).join('');
+}
+
+// ════════════════════════════════════════════════
+// RENDER HELPERS
+// ════════════════════════════════════════════════
+function statusBadge(s) {
+  const m={aberto:'badge-aberto','em andamento':'badge-andamento',resolvido:'badge-resolvido','feedback ao cliente':'badge-feedback'};
+  const l={aberto:'Aberto','em andamento':'Em andamento',resolvido:'Resolvido','feedback ao cliente':'Feedback'};
+  return `<span class="badge ${m[s]||'badge-aberto'}">${l[s]||s}</span>`;
+}
+function prioBadge(p) {
+  return `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text2)"><span class="prio-dot prio-${p}"></span>${p}</span>`;
+}
+function fmtPrazo(d) {
+  if (!d) return '';
+  const ds = d.split('T')[0];
+  if (ds===hoje) return `<span style="color:var(--red);font-size:12px;font-weight:500;">Hoje</span>`;
+  if (ds<hoje)   return `<span style="color:var(--red);font-size:12px;">Atrasado</span>`;
+  return `<span style="font-size:12px;color:var(--text2)">${ds}</span>`;
+}
+function ticketCard(t) {
+  return `<div class="ticket-card" onclick="openDetail(${t.id})">
+    <div class="tc-top"><div class="tc-title">${t.titulo}</div>${statusBadge(t.status)}</div>
+    <div class="tc-meta"><span>${t.categoria||''}</span>${t.local?`<span>· ${t.local}</span>`:''}</div>
+    <div class="tc-bottom">
+      <div style="display:flex;align-items:center;gap:10px;">${prioBadge(t.prioridade||'Baixa')}${t.responsavel_nome?`<span style="font-size:12px;color:var(--text2)">${t.responsavel_nome}</span>`:''}</div>
+      ${fmtPrazo(t.prazo)}
+    </div>
+  </div>`;
+}
+function emptyState(msg) {
+  return `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>${msg}</div>`;
+}
+
+// ════════════════════════════════════════════════
+// DASHBOARD
+// ════════════════════════════════════════════════
+function renderDashboard() {
+  document.getElementById('s-aberto').textContent    = stats.aberto    ?? '—';
+  document.getElementById('s-andamento').textContent = stats.andamento ?? '—';
+  document.getElementById('s-resolvido').textContent = stats.resolvido ?? '—';
+  document.getElementById('s-hoje').textContent      = stats.hoje      ?? '—';
+  const alta   = allTickets.filter(t => t.prioridade==='Alta' && t.status!=='resolvido');
+  const prazoH = allTickets.filter(t => t.prazo && t.prazo.split('T')[0]===hoje && t.status!=='resolvido');
+  document.getElementById('dash-alta').innerHTML  = alta.length   ? alta.map(ticketCard).join('')   : emptyState('Sem tíquetes de alta prioridade.');
+  document.getElementById('dash-hoje').innerHTML  = prazoH.length ? prazoH.map(ticketCard).join('') : emptyState('Sem prazos para hoje.');
+}
+
+// ════════════════════════════════════════════════
+// TICKETS
+// ════════════════════════════════════════════════
+function renderList() {
+  const f = filterAtual==='todos' ? allTickets : allTickets.filter(t => t.status===filterAtual);
+  document.getElementById('ticket-list').innerHTML = f.length ? f.map(ticketCard).join('') : emptyState('Nenhum tíquete encontrado.');
+}
+function setFilter(f, el) {
+  filterAtual=f;
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderList();
+}
+function showNewTicket() {
+  document.getElementById('n-msg').textContent='';
+  document.getElementById('n-autor').value = currentUser.nome + (currentUser.cargo?' – '+currentUser.cargo:'');
+  document.getElementById('overlay-novo').classList.add('open');
+}
+async function criarTicket() {
+  const origem = document.getElementById('n-origem').value;
+  const cat    = document.getElementById('n-cat').value;
+  const desc   = document.getElementById('n-desc').value.trim();
+  const local  = document.getElementById('n-local').value.trim();
+  const prio   = document.getElementById('n-prio').value;
+  const prazo  = document.getElementById('n-prazo').value || null;
+  const respId = document.getElementById('n-resp').value || null;
+  const msg    = document.getElementById('n-msg');
+  if (!origem||!cat||!desc) { msg.className='msg-error'; msg.textContent='Preencha origem, categoria e descrição.'; return; }
+  const titulo = cat + (local?' – '+local:'');
+  try {
+    await POST('/api/tickets',{ titulo,descricao:desc,categoria:cat,local,origem,prioridade:prio,prazo,responsavel_id:respId });
+    msg.className='msg-ok'; msg.textContent='✓ Tíquete aberto!';
+    ['n-origem','n-cat','n-desc','n-local','n-prazo'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('n-prio').value='Média';
+    document.getElementById('n-resp').value='';
+    await loadStats(); await loadTickets(); renderDashboard(); renderList();
+    setTimeout(()=>{ msg.textContent=''; closeOverlayById('overlay-novo'); },1200);
+  } catch(e) { msg.className='msg-error'; msg.textContent=e.message; }
+}
+
+// ════════════════════════════════════════════════
+// DETALHE
+// ════════════════════════════════════════════════
+async function openDetail(id) {
+  const t = allTickets.find(x=>x.id===id);
+  if (!t) return;
+  document.getElementById('overlay-detail').classList.add('open');
+  document.getElementById('detail-body').innerHTML='<div class="loader">Carregando...</div>';
+  const [hist, atvs] = await Promise.all([
+    GET(`/api/tickets/${id}/historico`),
+    GET(`/api/tickets/${id}/atividades`),
+  ]);
+  const atvsHtml = atvs.length ? atvs.map(a=>{
+    const done=a.status==='concluida';
+    return `<div class="activity-card">
+      <div class="activity-header">
+        <div class="activity-title-text" style="${done?'text-decoration:line-through;color:var(--text2);':''}">${a.titulo}</div>
+        <div class="activity-check ${done?'done':''}" onclick="toggleAtividade(${a.id},${id})"></div>
+      </div>
+      <div class="activity-meta">
+        ${a.responsavel_nome?`<span>👤 ${a.responsavel_nome}</span>`:''}
+        ${a.prazo?`<span>📅 ${a.prazo}</span>`:''}
+        ${a.criado_por?`<span>por ${a.criado_por}</span>`:''}
+      </div>
+    </div>`;
+  }).join('') : `<div style="font-size:13px;color:var(--text2);padding:8px 0">Nenhuma atividade ainda.</div>`;
+
+  document.getElementById('detail-body').innerHTML=`
+    <div class="detail-id">#${t.id} · ${predioAtivo.nome}</div>
+    <div class="detail-title">${t.titulo}</div>
+    <div style="display:flex;gap:8px;margin:10px 0 16px;flex-wrap:wrap;">${statusBadge(t.status)} ${prioBadge(t.prioridade||'Baixa')}</div>
+    <div class="detail-grid">
+      <div class="detail-field"><div class="dl">Categoria</div><div class="dv">${t.categoria||'—'}</div></div>
+      <div class="detail-field"><div class="dl">Local</div><div class="dv">${t.local||'—'}</div></div>
+      <div class="detail-field"><div class="dl">Aberto por</div><div class="dv">${t.autor_nome||'—'}</div></div>
+      <div class="detail-field"><div class="dl">Origem</div><div class="dv">${t.origem||'—'}</div></div>
+      <div class="detail-field"><div class="dl">Responsável</div><div class="dv">${t.responsavel_nome||'A definir'}</div></div>
+      <div class="detail-field"><div class="dl">Prazo</div><div class="dv">${t.prazo?fmtPrazo(t.prazo):'—'}</div></div>
+    </div>
+    ${t.descricao?`<div style="background:var(--surface2);border-radius:var(--radius);padding:12px 14px;font-size:14px;line-height:1.6;margin-bottom:4px;">${t.descricao}</div>`:''}
+    <div class="divider"></div>
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Atualizar status</div>
+    <div class="status-pills">
+      <button class="status-pill ${t.status==='aberto'?'sel-aberto':''}" onclick="updateStatus(${id},'aberto')">Aberto</button>
+      <button class="status-pill ${t.status==='em andamento'?'sel-andamento':''}" onclick="updateStatus(${id},'em andamento')">Em andamento</button>
+      <button class="status-pill ${t.status==='feedback ao cliente'?'sel-feedback':''}" onclick="updateStatus(${id},'feedback ao cliente')">Feedback</button>
+      <button class="status-pill ${t.status==='resolvido'?'sel-resolvido':''}" onclick="updateStatus(${id},'resolvido')">Resolvido</button>
+    </div>
+    <div style="margin-top:16px;">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Registrar update</div>
+      <div class="update-row">
+        <input type="text" id="upd-txt" placeholder="O que foi feito / próximo passo...">
+        <button class="btn btn-primary" style="width:auto;padding:10px 16px;white-space:nowrap;" onclick="addUpdate(${id})">Salvar</button>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;">Atividades</div>
+      <button class="btn btn-ghost btn-sm" onclick="toggleNovaAtividade(${id})">+ Nova</button>
+    </div>
+    <div id="nova-atv-${id}" style="display:none;background:var(--surface2);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
+      <div class="field" style="margin-bottom:10px;"><label>Título</label><input type="text" id="atv-titulo-${id}" placeholder="O que precisa ser feito?"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="field" style="margin-bottom:0;"><label>Responsável</label><input type="text" id="atv-resp-${id}" placeholder="Nome"></div>
+        <div class="field" style="margin-bottom:0;"><label>Prazo</label><input type="date" id="atv-prazo-${id}"></div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:12px;" onclick="criarAtividade(${id})">Adicionar</button>
+    </div>
+    ${atvsHtml}
+    <div class="divider"></div>
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;">Histórico</div>
+    <ul class="timeline">
+      ${hist.length?hist.map(h=>`
+        <li class="tl-item"><div class="tl-dot"></div>
+          <div class="tl-content">
+            <div class="tl-msg">${h.mensagem}</div>
+            <div class="tl-meta">${h.autor_nome?h.autor_nome+' · ':''}${new Date(h.criado_em).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
+          </div></li>`).join(''):`<li class="tl-item"><div class="tl-dot"></div><div class="tl-content"><div class="tl-msg" style="color:var(--text2)">Sem atualizações ainda.</div></div></li>`}
+    </ul>
+    <div style="height:20px;"></div>
+  `;
+}
+
+async function updateStatus(id,status) {
+  try {
+    await PATCH(`/api/tickets/${id}/status`,{status});
+    const i=allTickets.findIndex(t=>t.id===id);
+    if(i>-1) allTickets[i].status=status;
+    await loadStats(); renderDashboard(); renderList(); await openDetail(id);
+    showToast('Status atualizado');
+  } catch(e){showToast('Erro: '+e.message);}
+}
+async function addUpdate(id) {
+  const txt=document.getElementById('upd-txt')?.value.trim();
+  if(!txt) return;
+  try{ await POST(`/api/tickets/${id}/historico`,{mensagem:txt}); await openDetail(id); showToast('Update registrado'); }
+  catch(e){showToast('Erro: '+e.message);}
+}
+
+// ════════════════════════════════════════════════
+// ATIVIDADES
+// ════════════════════════════════════════════════
+function toggleNovaAtividade(tid){
+  const el=document.getElementById('nova-atv-'+tid);
+  if(el) el.style.display=el.style.display==='none'?'block':'none';
+}
+async function criarAtividade(tid){
+  const titulo=document.getElementById('atv-titulo-'+tid)?.value.trim();
+  const resp=document.getElementById('atv-resp-'+tid)?.value.trim();
+  const prazo=document.getElementById('atv-prazo-'+tid)?.value||null;
+  if(!titulo) return;
+  try{ await POST(`/api/tickets/${tid}/atividades`,{titulo,responsavel_nome:resp||null,prazo}); await openDetail(tid); showToast('Atividade adicionada'); }
+  catch(e){showToast('Erro: '+e.message);}
+}
+async function toggleAtividade(atvId,tid){
+  try{ await PATCH(`/api/atividades/${atvId}/toggle`); await openDetail(tid); }
+  catch(e){showToast('Erro: '+e.message);}
+}
+
+// ════════════════════════════════════════════════
+// TEAM
+// ════════════════════════════════════════════════
+function openAddMember() {
+  ['m-nome','m-cargo','m-email','m-pass'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('m-role').value='membro';
+  document.getElementById('m-msg').textContent='';
+  // Preenche checkboxes de prédios
+  const listEl=document.getElementById('m-predios-list');
+  listEl.innerHTML=allPredios.map(p=>`
+    <label class="check-item">
+      <input type="checkbox" value="${p.id}" ${p.id===predioAtivo.id?'checked':''}>
+      <span>${p.nome}</span>
+    </label>`).join('');
+  document.getElementById('overlay-member').classList.add('open');
+}
+async function adicionarMembro(){
+  const nome=document.getElementById('m-nome').value.trim();
+  const cargo=document.getElementById('m-cargo').value.trim();
+  const email=document.getElementById('m-email').value.trim();
+  const senha=document.getElementById('m-pass').value;
+  const role=document.getElementById('m-role').value;
+  const msg=document.getElementById('m-msg');
+  const predio_ids=[...document.querySelectorAll('#m-predios-list input:checked')].map(el=>parseInt(el.value));
+  if(!nome||!email||!senha){msg.className='msg-error';msg.textContent='Preencha nome, e-mail e senha.';return;}
+  msg.textContent='Criando...';msg.className='';
+  try{
+    await POST('/api/usuarios',{nome,email,senha,cargo,role,predio_ids});
+    await loadMembros(); renderTeam();
+    msg.className='msg-ok';msg.textContent=`✓ ${nome} adicionado!`;
+    setTimeout(()=>closeOverlayById('overlay-member'),1600);
+  }catch(e){msg.className='msg-error';msg.textContent=e.message;}
+}
+async function removerMembro(id){
+  if(!confirm('Desativar este membro?')) return;
+  try{ await DEL(`/api/usuarios/${id}`); await loadMembros(); renderTeam(); showToast('Membro removido'); }
+  catch(e){showToast('Erro: '+e.message);}
+}
+function renderTeam(){
+  const el=document.getElementById('team-list');
+  if(!membersList.length){el.innerHTML=emptyState('Nenhum membro neste prédio.');return;}
+  el.innerHTML=membersList.map(m=>`
+    <div class="member-card">
+      <div>
+        <div class="member-name">${m.nome}</div>
+        <div class="member-meta">${m.cargo||'—'} · ${m.role}</div>
+        <div style="font-size:12px;color:var(--text3);">${m.email}</div>
+      </div>
+      ${m.id!==currentUser.id?`<button class="btn btn-ghost btn-sm btn-danger" onclick="removerMembro(${m.id})">Remover</button>`:''}
+    </div>`).join('');
+}
+
+// ════════════════════════════════════════════════
+// PRÉDIOS (superadmin)
+// ════════════════════════════════════════════════
+function openAddPredio(){
+  ['np-nome','np-slug'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('np-msg').textContent='';
+  document.getElementById('overlay-predio-novo').classList.add('open');
+}
+// Auto-gera slug a partir do nome
+document.addEventListener('DOMContentLoaded',()=>{
+  const nomeEl=document.getElementById('np-nome');
+  const slugEl=document.getElementById('np-slug');
+  if(nomeEl&&slugEl){
+    nomeEl.addEventListener('input',()=>{
+      slugEl.value=nomeEl.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
+    });
+  }
+});
+async function criarPredio(){
+  const nome=document.getElementById('np-nome').value.trim();
+  const slug=document.getElementById('np-slug').value.trim();
+  const msg=document.getElementById('np-msg');
+  if(!nome||!slug){msg.className='msg-error';msg.textContent='Nome e slug obrigatórios.';return;}
+  try{
+    const p=await POST('/api/predios',{nome,slug});
+    allPredios.push(p);
+    currentUser.predios.push(p); // adiciona à lista de seleção
+    renderPrediosList();
+    msg.className='msg-ok';msg.textContent=`✓ Prédio "${nome}" criado!`;
+    setTimeout(()=>closeOverlayById('overlay-predio-novo'),1600);
+    showToast('Prédio criado');
+  }catch(e){msg.className='msg-error';msg.textContent=e.message;}
+}
+function renderPrediosList(){
+  const el=document.getElementById('predios-list');
+  if(!el) return;
+  if(!allPredios.length){el.innerHTML=emptyState('Nenhum prédio cadastrado.');return;}
+  el.innerHTML=allPredios.map(p=>`
+    <div class="predio-admin-card">
+      <div>
+        <div class="predio-admin-nome">${p.nome}</div>
+        <div class="predio-admin-slug">${p.slug}</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span class="badge ${p.ativo?'badge-resolvido':'badge-andamento'}">${p.ativo?'Ativo':'Inativo'}</span>
+        ${p.id!==predioAtivo.id?`<button class="btn btn-ghost btn-sm" onclick="selecionarPredio(${p.id},'${encodeURIComponent(p.nome)}','${p.slug}')">Ir →</button>`:'<span style="font-size:12px;color:var(--text2);">atual</span>'}
+      </div>
+    </div>`).join('');
+}
+
+// ════════════════════════════════════════════════
+// NAV
+// ════════════════════════════════════════════════
+function showScreen(name,el){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.querySelectorAll('[data-tab]').forEach(t=>t.classList.remove('active'));
+  if(el){el.classList.add('active');}
+  if(name==='dashboard') renderDashboard();
+  if(name==='tickets')   renderList();
+  if(name==='team')      renderTeam();
+  if(name==='predios')   renderPrediosList();
+}
+function showPage(name){
+  document.getElementById('page-login').classList.remove('active');
+  document.getElementById('page-predio').classList.remove('active');
+  document.getElementById('app').style.display='none';
+  if(name==='login')   document.getElementById('page-login').classList.add('active');
+  if(name==='predio')  document.getElementById('page-predio').classList.add('active');
+  if(name==='app')     document.getElementById('app').style.display='block';
+}
+function closeOverlay(id,e){ if(e.target===document.getElementById(id)) document.getElementById(id).classList.remove('open'); }
+function closeOverlayById(id){ document.getElementById(id).classList.remove('open'); }
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2400);
+}
+</script>
+</body>
+</html>
