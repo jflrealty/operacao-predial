@@ -209,6 +209,18 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .predio-admin-nome{font-size:14px;font-weight:500;}
 .predio-admin-slug{font-size:12px;font-family:var(--mono);color:var(--text3);margin-top:2px;}
 
+/* ── FOTOS ── */
+.fotos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;margin-bottom:12px;}
+.foto-thumb{position:relative;aspect-ratio:1;border-radius:var(--radius);overflow:hidden;background:var(--surface2);border:1px solid var(--border);cursor:pointer;}
+.foto-thumb img{width:100%;height:100%;object-fit:cover;}
+.foto-thumb .foto-del{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.55);border:none;color:#fff;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;}
+.foto-thumb:hover .foto-del{opacity:1;}
+.upload-area{border:2px dashed var(--border);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;transition:all .15s;background:var(--surface2);}
+.upload-area:hover{border-color:var(--border2);background:var(--surface);}
+.upload-area input{display:none;}
+.upload-area svg{width:28px;height:28px;stroke:var(--text3);margin-bottom:6px;}
+.upload-area p{font-size:13px;color:var(--text2);margin:0;}
+
 .toast{position:fixed;bottom:calc(86px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%) translateY(16px);background:var(--accent);color:var(--accent-fg);padding:10px 22px;border-radius:99px;font-size:13px;font-weight:500;z-index:999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.15);}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 @media(min-width:768px){.toast{bottom:32px;}}
@@ -272,6 +284,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
       <button class="nav-item" onclick="showScreen('tickets',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
         Tickets
+      </button>
+      <button class="nav-item" onclick="showScreen('relatorios',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        Relatórios
       </button>
       <div class="nav-section admin-only" style="display:none;">Admin</div>
       <button class="nav-item admin-only" style="display:none;" onclick="showScreen('team',this)">
@@ -344,6 +360,68 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         <div id="team-list"><div class="loader">Carregando...</div></div>
       </div>
 
+      <!-- RELATÓRIOS -->
+      <div class="screen" id="screen-relatorios">
+        <div class="section-title" style="margin-top:0;">Exportar Relatório</div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:500;margin-bottom:16px;">Filtros</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="field" style="margin:0;">
+              <label>Status</label>
+              <select id="rel-status">
+                <option value="">Todos</option>
+                <option value="aberto">Aberto</option>
+                <option value="em andamento">Em andamento</option>
+                <option value="resolvido">Resolvido</option>
+                <option value="feedback ao cliente">Feedback</option>
+              </select>
+            </div>
+            <div class="field" style="margin:0;">
+              <label>Prioridade</label>
+              <select id="rel-prio">
+                <option value="">Todas</option>
+                <option value="Alta">Alta</option>
+                <option value="Média">Média</option>
+                <option value="Baixa">Baixa</option>
+              </select>
+            </div>
+            <div class="field" style="margin:0;">
+              <label>Data início</label>
+              <input type="date" id="rel-de">
+            </div>
+            <div class="field" style="margin:0;">
+              <label>Data fim</label>
+              <input type="date" id="rel-ate">
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <button class="btn btn-primary" onclick="exportar('excel')" style="display:flex;align-items:center;justify-content:center;gap:8px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Excel (.xlsx)
+          </button>
+          <button class="btn btn-ghost" onclick="exportar('pdf')" style="display:flex;align-items:center;justify-content:center;gap:8px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            PDF
+          </button>
+        </div>
+        <div id="rel-msg" style="margin-top:12px;font-size:13px;text-align:center;"></div>
+        <div class="divider"></div>
+        <div class="section-title">Notificações por e-mail</div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;">
+          <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px;">
+            E-mails são enviados automaticamente quando um ticket é aberto ou tem o status atualizado. Configure o SMTP nas variáveis do Railway.
+          </div>
+          <div style="font-size:12px;background:var(--surface2);border-radius:var(--radius);padding:12px;font-family:var(--mono);line-height:2;color:var(--text2);">
+            SMTP_HOST=smtp.gmail.com<br>
+            SMTP_PORT=587<br>
+            SMTP_USER=seu@email.com<br>
+            SMTP_PASS=sua-senha-de-app<br>
+            SMTP_SECURE=false
+          </div>
+        </div>
+      </div>
+
       <!-- PRÉDIOS (superadmin) -->
       <div class="screen" id="screen-predios">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
@@ -365,6 +443,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     <button class="bottom-tab" data-tab onclick="showScreen('tickets',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
       Tickets
+    </button>
+    <button class="bottom-tab" data-tab onclick="showScreen('relatorios',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+      Relatórios
     </button>
     <button class="bottom-tab admin-only" data-tab style="display:none;" onclick="showScreen('team',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
@@ -781,7 +863,9 @@ async function openDetail(id) {
     </div>`;
   }).join('') : `<div style="font-size:13px;color:var(--text2);padding:8px 0">Nenhuma atividade ainda.</div>`;
 
-  document.getElementById('detail-body').innerHTML=`
+  // Substitui placeholder TICKETID pelo ID real na seção de fotos do template
+  // (feito via JS após render)
+  const detailHtml = `
     <div class="detail-id">#${t.id} · ${predioAtivo.nome}</div>
     <div class="detail-title">${t.titulo}</div>
     <div style="display:flex;gap:8px;margin:10px 0 16px;flex-wrap:wrap;">${statusBadge(t.status)} ${prioBadge(t.prioridade||'Baixa')}</div>
@@ -824,6 +908,16 @@ async function openDetail(id) {
     </div>
     ${atvsHtml}
     <div class="divider"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;">Fotos</div>
+      <label style="cursor:pointer;">
+        <input type="file" id="foto-input-TICKETID" accept="image/*,.pdf" multiple style="display:none;" onchange="uploadFotos(TICKETID,this)">
+        <span class="btn btn-ghost btn-sm" onclick="document.getElementById('foto-input-TICKETID').click()">+ Anexar</span>
+      </label>
+    </div>
+    <div id="fotos-grid-TICKETID" class="fotos-grid"></div>
+    <div id="fotos-msg-TICKETID" style="font-size:12px;color:var(--text2);margin-bottom:4px;"></div>
+    <div class="divider"></div>
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;">Histórico</div>
     <ul class="timeline">
       ${hist.length?hist.map(h=>`
@@ -835,6 +929,10 @@ async function openDetail(id) {
     </ul>
     <div style="height:20px;"></div>
   `;
+  // Substitui TICKETID pelo id real
+  document.getElementById('detail-body').innerHTML = detailHtml.replaceAll('TICKETID', id);
+  // Carrega fotos assincronamente
+  carregarFotos(id);
 }
 
 async function updateStatus(id,status) {
@@ -926,6 +1024,99 @@ function renderTeam(){
 }
 
 // ════════════════════════════════════════════════
+// RELATÓRIOS
+// ════════════════════════════════════════════════
+function exportar(tipo) {
+  const status = document.getElementById('rel-status').value;
+  const prio   = document.getElementById('rel-prio').value;
+  const de     = document.getElementById('rel-de').value;
+  const ate    = document.getElementById('rel-ate').value;
+  const msg    = document.getElementById('rel-msg');
+  msg.textContent = 'Gerando arquivo...'; msg.className = '';
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (prio)   params.set('prioridade', prio);
+  if (de)     params.set('de', de);
+  if (ate)    params.set('ate', ate);
+  fetch(`/api/relatorios/${tipo}?${params}`, {
+    headers: { 'Authorization':'Bearer '+token, 'x-predio-id': String(predioAtivo.id) }
+  }).then(r => {
+    if (!r.ok) throw new Error('Erro ao gerar');
+    return r.blob();
+  }).then(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `tickets-${new Date().toISOString().slice(0,10)}.${tipo==='excel'?'xlsx':'pdf'}`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    msg.className='msg-ok'; msg.textContent='✓ Download iniciado!';
+    setTimeout(()=>msg.textContent='',3000);
+  }).catch(e=>{ msg.className='msg-error'; msg.textContent=e.message; });
+}
+
+// ════════════════════════════════════════════════
+// FOTOS
+// ════════════════════════════════════════════════
+async function carregarFotos(ticketId) {
+  const grid = document.getElementById(`fotos-grid-${ticketId}`);
+  if (!grid) return;
+  try {
+    const fotos = await GET(`/api/tickets/${ticketId}/fotos`);
+    if (!fotos.length) {
+      grid.innerHTML='<div style="font-size:13px;color:var(--text2);padding:4px 0 8px;">Nenhuma foto anexada.</div>';
+      return;
+    }
+    grid.innerHTML = fotos.map(f => {
+      const isImg = f.mime_type && f.mime_type.startsWith('image/');
+      return `<div class="foto-thumb" title="${f.nome_original}">
+        ${isImg
+          ? `<img src="/uploads/${f.nome_arquivo}" onclick="verFoto('/uploads/${f.nome_arquivo}')" loading="lazy">`
+          : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:10px;color:var(--text2);text-align:center;padding:4px;">${f.nome_original}</div>`}
+        <button class="foto-del" onclick="deletarFoto(${f.id},${ticketId})" title="Remover">×</button>
+      </div>`;
+    }).join('');
+  } catch(e) { console.error('Fotos:', e.message); }
+}
+
+async function uploadFotos(ticketId, input) {
+  const msg = document.getElementById(`fotos-msg-${ticketId}`);
+  if (!input.files.length) return;
+  if (msg) msg.textContent = `Enviando ${input.files.length} arquivo(s)...`;
+  const formData = new FormData();
+  for (const f of input.files) formData.append('fotos', f);
+  try {
+    const res = await fetch(`/api/tickets/${ticketId}/fotos`, {
+      method:'POST',
+      headers:{ 'Authorization':'Bearer '+token, 'x-predio-id': String(predioAtivo.id) },
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro||'Erro');
+    if (msg) msg.textContent='';
+    input.value='';
+    await carregarFotos(ticketId);
+    showToast(`${data.length} foto(s) enviada(s)`);
+  } catch(e) { if (msg) msg.textContent='Erro: '+e.message; }
+}
+
+function verFoto(url) {
+  const ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
+  ov.innerHTML=`<img src="${url}" style="max-width:95vw;max-height:95vh;object-fit:contain;border-radius:8px;">`;
+  ov.onclick=()=>ov.remove();
+  document.body.appendChild(ov);
+}
+
+async function deletarFoto(fotoId, ticketId) {
+  if (!confirm('Remover esta foto?')) return;
+  try {
+    await DEL(`/api/fotos/${fotoId}`);
+    await carregarFotos(ticketId);
+    showToast('Foto removida');
+  } catch(e) { showToast('Erro: '+e.message); }
+}
+
+// ════════════════════════════════════════════════
 // PRÉDIOS (superadmin)
 // ════════════════════════════════════════════════
 function openAddPredio(){
@@ -984,10 +1175,11 @@ function showScreen(name,el){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.querySelectorAll('[data-tab]').forEach(t=>t.classList.remove('active'));
   if(el){el.classList.add('active');}
-  if(name==='dashboard') renderDashboard();
-  if(name==='tickets')   renderList();
-  if(name==='team')      renderTeam();
-  if(name==='predios')   renderPrediosList();
+  if(name==='dashboard')  renderDashboard();
+  if(name==='tickets')    renderList();
+  if(name==='team')       renderTeam();
+  if(name==='predios')    renderPrediosList();
+  if(name==='relatorios') { /* static screen */ }
 }
 function showPage(name){
   document.getElementById('page-login').classList.remove('active');
