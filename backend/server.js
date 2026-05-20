@@ -53,18 +53,23 @@ const mailer = nodemailer.createTransport({
 });
 
 async function enviarEmail({ to, subject, html }) {
-  if (!process.env.SMTP_USER) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     console.log(`[EMAIL] SMTP não configurado — pulando envio para ${to}`);
     return;
   }
+  if (!to || !to.includes('@')) {
+    console.log(`[EMAIL] Destinatário inválido: ${to}`);
+    return;
+  }
   try {
-    await mailer.sendMail({
+    console.log(`[EMAIL] Enviando para ${to} | assunto: ${subject}`);
+    const info = await mailer.sendMail({
       from: `"Operação JFL Inc" <${process.env.SMTP_USER}>`,
       to, subject, html,
     });
-    console.log(`[EMAIL] Enviado para ${to}`);
+    console.log(`[EMAIL] ✅ Enviado! MessageId: ${info.messageId}`);
   } catch (e) {
-    console.error(`[EMAIL] Erro:`, e.message);
+    console.error(`[EMAIL] ❌ Erro ao enviar para ${to}:`, e.message);
   }
 }
 
