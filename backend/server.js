@@ -1,20 +1,122 @@
 // ============================================================
-// OPERAÇÃO PREDIAL — Backend
-// Express + PostgreSQL + JWT  |  Zero Supabase
+// OPERAÇÃO JFL Inc — Backend
+// Express + PostgreSQL + JWT | Nodemailer | PDFKit | ExcelJS | Multer
 // ============================================================
 
-const express  = require('express');
-const { Pool } = require('pg');
-const bcrypt   = require('bcryptjs');
-const jwt      = require('jsonwebtoken');
-const cors     = require('cors');
-const path     = require('path');
+const express      = require('express');
+const { Pool }     = require('pg');
+const bcrypt       = require('bcryptjs');
+const jwt          = require('jsonwebtoken');
+const cors         = require('cors');
+const path         = require('path');
+const fs           = require('fs');
+const nodemailer   = require('nodemailer');
+const multer       = require('multer');
+const PDFDocument  = require('pdfkit');
+const ExcelJS      = require('exceljs');
 
 const app    = express();
 const PORT   = process.env.PORT || 3000;
 const SECRET = process.env.JWT_SECRET || 'dev-secret-troque-em-producao';
 
-// ── POOL ─────────────────────────────────────────────────────
+// ── UPLOAD DIR ────────────────────────────────────────────────
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+// ── MULTER ────────────────────────────────────────────────────
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename:    (req, file, cb) => {
+    const ext  = path.extname(file.originalname).toLowerCase();
+    const name = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
+    cb(null, name);
+  },
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.jpg','.jpeg','.png','.webp','.gif','.pdf'];
+    cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
+  },
+});
+
+// ── NODEMAILER ────────────────────────────────────────────────
+const mailer = nodemailer.createTransport({
+  host:   process.env.SMTP_HOST   || 'smtp.gmail.com',
+  port:   parseInt(process.env.SMTP_PORT || '587'),
+  secure: process.env.SMTP_SECURE === 'true',
+  auth: {
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+  },
+});
+
+async function enviarEmail({ to, subject, html }) {
+  if (!process.env.SMTP_USER) {
+    console.log(`[EMAIL] SMTP não configurado — pulando envio para ${to}`);
+    return;
+  }
+  try {
+    await mailer.sendMail({
+      from: `"Operação JFL Inc" <${process.env.SMTP_USER}>`,
+      to, subject, html,
+    });
+    console.log(`[EMAIL] Enviado para ${to}`);
+  } catch (e) {
+    console.error(`[EMAIL] Erro:`, e.message);
+  }
+}
+
+function emailTicketAberto(ticket, autorEmail) {
+  return {
+    to: autorEmail,
+    subject: `[JFL] Ticket #${ticket.id} aberto — ${ticket.titulo}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:#1A1917;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0;">
+          <h2 style="margin:0;font-size:18px;">⬡ Operação JFL Inc</h2>
+        </div>
+        <div style="background:#f9f9f7;padding:24px;border:1px solid #e2ded6;border-top:none;border-radius:0 0 8px 8px;">
+          <p style="margin:0 0 16px;font-size:15px;color:#1a1917;">Ticket aberto com sucesso!</p>
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:8px 0;color:#6b6860;width:120px;">Ticket</td><td style="padding:8px 0;font-weight:600;">#${ticket.id}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Título</td><td style="padding:8px 0;">${ticket.titulo}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Categoria</td><td style="padding:8px 0;">${ticket.categoria||'—'}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Prioridade</td><td style="padding:8px 0;">${ticket.prioridade}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Local</td><td style="padding:8px 0;">${ticket.local||'—'}</td></tr>
+            ${ticket.prazo ? `<tr><td style="padding:8px 0;color:#6b6860;">Prazo</td><td style="padding:8px 0;">${ticket.prazo}</td></tr>` : ''}
+          </table>
+          ${ticket.descricao ? `<div style="background:#fff;border:1px solid #e2ded6;border-radius:6px;padding:12px;margin-top:12px;font-size:14px;color:#1a1917;">${ticket.descricao}</div>` : ''}
+        </div>
+      </div>`,
+  };
+}
+
+function emailStatusAtualizado(ticket, novoStatus, autorNome, responsavelEmail) {
+  const cores = { aberto:'#1A4F8A', 'em andamento':'#92590A', resolvido:'#1E6B3C', 'feedback ao cliente':'#6B21A8' };
+  const cor = cores[novoStatus] || '#1A1917';
+  return {
+    to: responsavelEmail,
+    subject: `[JFL] Ticket #${ticket.id} → ${novoStatus}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:#1A1917;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0;">
+          <h2 style="margin:0;font-size:18px;">⬡ Operação JFL Inc</h2>
+        </div>
+        <div style="background:#f9f9f7;padding:24px;border:1px solid #e2ded6;border-top:none;border-radius:0 0 8px 8px;">
+          <p style="margin:0 0 12px;font-size:15px;color:#1a1917;">Status atualizado por <strong>${autorNome}</strong></p>
+          <div style="display:inline-block;background:${cor}20;color:${cor};padding:6px 16px;border-radius:99px;font-size:13px;font-weight:600;margin-bottom:16px;">${novoStatus}</div>
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:8px 0;color:#6b6860;width:120px;">Ticket</td><td style="padding:8px 0;font-weight:600;">#${ticket.id}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Título</td><td style="padding:8px 0;">${ticket.titulo}</td></tr>
+          </table>
+        </div>
+      </div>`,
+  };
+}
+
+// ── DATABASE ──────────────────────────────────────────────────
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
@@ -24,332 +126,242 @@ const pool = new Pool({
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(UPLOAD_DIR));
 
-// ── AUTH MIDDLEWARE ───────────────────────────────────────────
+// ── AUTH ──────────────────────────────────────────────────────
 function auth(req, res, next) {
   const h = req.headers.authorization;
   if (!h) return res.status(401).json({ erro: 'Sem token' });
-  try {
-    req.user = jwt.verify(h.replace('Bearer ', ''), SECRET);
-    next();
-  } catch {
-    res.status(401).json({ erro: 'Token inválido' });
-  }
+  try { req.user = jwt.verify(h.replace('Bearer ', ''), SECRET); next(); }
+  catch { res.status(401).json({ erro: 'Token inválido' }); }
 }
 
-// Garante que o usuário tem acesso ao prédio ativo na sessão
 function comPredio(req, res, next) {
   const pid = parseInt(req.headers['x-predio-id']);
   if (!pid) return res.status(400).json({ erro: 'Prédio não selecionado' });
-
-  // superadmin/admin: acesso livre
-  if (req.user.role === 'superadmin' || req.user.role === 'admin') {
-    req.predio_id = pid;
-    return next();
-  }
-
-  // membro: verifica vínculo
-  pool.query(
-    'SELECT 1 FROM usuario_predios WHERE usuario_id=$1 AND predio_id=$2',
-    [req.user.id, pid]
-  ).then(({ rows }) => {
-    if (!rows.length) return res.status(403).json({ erro: 'Sem acesso a este prédio' });
-    req.predio_id = pid;
-    next();
-  }).catch(() => res.status(500).json({ erro: 'Erro interno' }));
+  if (['superadmin','admin'].includes(req.user.role)) { req.predio_id = pid; return next(); }
+  pool.query('SELECT 1 FROM usuario_predios WHERE usuario_id=$1 AND predio_id=$2', [req.user.id, pid])
+    .then(({ rows }) => {
+      if (!rows.length) return res.status(403).json({ erro: 'Sem acesso a este prédio' });
+      req.predio_id = pid; next();
+    }).catch(() => res.status(500).json({ erro: 'Erro interno' }));
 }
 
 function adminOnly(req, res, next) {
-  if (!['superadmin','admin'].includes(req.user.role))
-    return res.status(403).json({ erro: 'Apenas admins' });
+  if (!['superadmin','admin'].includes(req.user.role)) return res.status(403).json({ erro: 'Apenas admins' });
   next();
 }
-
 function superOnly(req, res, next) {
-  if (req.user.role !== 'superadmin')
-    return res.status(403).json({ erro: 'Apenas superadmin' });
+  if (req.user.role !== 'superadmin') return res.status(403).json({ erro: 'Apenas superadmin' });
   next();
 }
 
-// ── AUTH ──────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// AUTH ROUTES
+// ══════════════════════════════════════════════════════════════
 
-// POST /api/auth/login
 app.post('/api/auth/login', async (req, res) => {
   const { email, senha } = req.body;
   if (!email || !senha) return res.status(400).json({ erro: 'E-mail e senha obrigatórios' });
   try {
-    const { rows } = await pool.query(
-      'SELECT * FROM usuarios WHERE email=$1 AND ativo=TRUE',
-      [email.toLowerCase().trim()]
-    );
+    const { rows } = await pool.query('SELECT * FROM usuarios WHERE email=$1 AND ativo=TRUE', [email.toLowerCase().trim()]);
     const u = rows[0];
-    if (!u || !(await bcrypt.compare(senha, u.senha_hash)))
-      return res.status(401).json({ erro: 'E-mail ou senha incorretos' });
+    if (!u || !(await bcrypt.compare(senha, u.senha_hash))) return res.status(401).json({ erro: 'E-mail ou senha incorretos' });
 
-    // Busca prédios que o usuário pode acessar
     let predios = [];
-    if (u.role === 'superadmin' || u.role === 'admin') {
-      const { rows: ps } = await pool.query(
-        'SELECT id, nome, slug FROM predios WHERE ativo=TRUE ORDER BY nome'
-      );
+    if (['superadmin','admin'].includes(u.role)) {
+      const { rows: ps } = await pool.query('SELECT id,nome,slug FROM predios WHERE ativo=TRUE ORDER BY nome');
       predios = ps;
     } else {
       const { rows: ps } = await pool.query(
-        `SELECT p.id, p.nome, p.slug FROM predios p
-         JOIN usuario_predios up ON up.predio_id = p.id
-         WHERE up.usuario_id=$1 AND p.ativo=TRUE ORDER BY p.nome`,
+        `SELECT p.id,p.nome,p.slug FROM predios p JOIN usuario_predios up ON up.predio_id=p.id WHERE up.usuario_id=$1 AND p.ativo=TRUE ORDER BY p.nome`,
         [u.id]
       );
       predios = ps;
     }
 
-    const token = jwt.sign(
-      { id: u.id, role: u.role, nome: u.nome, email: u.email, cargo: u.cargo },
-      SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.json({
-      token,
-      usuario: { id: u.id, nome: u.nome, email: u.email, cargo: u.cargo, role: u.role },
-      predios,
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ erro: 'Erro interno' });
-  }
+    const token = jwt.sign({ id:u.id, role:u.role, nome:u.nome, email:u.email, cargo:u.cargo }, SECRET, { expiresIn:'7d' });
+    res.json({ token, usuario:{ id:u.id, nome:u.nome, email:u.email, cargo:u.cargo, role:u.role }, predios });
+  } catch(e) { console.error(e); res.status(500).json({ erro: 'Erro interno' }); }
 });
 
-// GET /api/auth/me  — retorna usuário + prédios acessíveis
 app.get('/api/auth/me', auth, async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      'SELECT id, nome, email, cargo, role FROM usuarios WHERE id=$1',
-      [req.user.id]
-    );
+    const { rows } = await pool.query('SELECT id,nome,email,cargo,role FROM usuarios WHERE id=$1', [req.user.id]);
     const u = rows[0];
     if (!u) return res.status(404).json({ erro: 'Não encontrado' });
-
     let predios = [];
-    if (u.role === 'superadmin' || u.role === 'admin') {
-      const { rows: ps } = await pool.query(
-        'SELECT id, nome, slug FROM predios WHERE ativo=TRUE ORDER BY nome'
-      );
+    if (['superadmin','admin'].includes(u.role)) {
+      const { rows: ps } = await pool.query('SELECT id,nome,slug FROM predios WHERE ativo=TRUE ORDER BY nome');
       predios = ps;
     } else {
       const { rows: ps } = await pool.query(
-        `SELECT p.id, p.nome, p.slug FROM predios p
-         JOIN usuario_predios up ON up.predio_id=p.id
-         WHERE up.usuario_id=$1 AND p.ativo=TRUE ORDER BY p.nome`,
+        `SELECT p.id,p.nome,p.slug FROM predios p JOIN usuario_predios up ON up.predio_id=p.id WHERE up.usuario_id=$1 AND p.ativo=TRUE ORDER BY p.nome`,
         [u.id]
       );
       predios = ps;
     }
-
     res.json({ ...u, predios });
-  } catch (e) {
-    res.status(500).json({ erro: 'Erro interno' });
-  }
+  } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
 });
 
-// ── PRÉDIOS ───────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// PRÉDIOS
+// ══════════════════════════════════════════════════════════════
 
-// GET /api/predios — lista todos (admin+)
 app.get('/api/predios', auth, adminOnly, async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM predios ORDER BY nome');
   res.json(rows);
 });
 
-// POST /api/predios — superadmin cria novo prédio
 app.post('/api/predios', auth, superOnly, async (req, res) => {
   const { nome, slug } = req.body;
   if (!nome || !slug) return res.status(400).json({ erro: 'Nome e slug obrigatórios' });
   try {
-    const { rows } = await pool.query(
-      'INSERT INTO predios (nome, slug) VALUES ($1,$2) RETURNING *',
-      [nome, slug.toLowerCase().replace(/\s+/g,'-')]
-    );
+    const { rows } = await pool.query('INSERT INTO predios (nome,slug) VALUES ($1,$2) RETURNING *', [nome, slug.toLowerCase().replace(/\s+/g,'-')]);
     res.status(201).json(rows[0]);
-  } catch (e) {
-    if (e.code === '23505') return res.status(409).json({ erro: 'Slug já existe' });
+  } catch(e) {
+    if (e.code==='23505') return res.status(409).json({ erro: 'Slug já existe' });
     res.status(500).json({ erro: 'Erro interno' });
   }
 });
 
-// PATCH /api/predios/:id — renomear/ativar/desativar
 app.patch('/api/predios/:id', auth, superOnly, async (req, res) => {
   const { nome, ativo } = req.body;
-  try {
-    const { rows } = await pool.query(
-      `UPDATE predios SET
-         nome  = COALESCE($1, nome),
-         ativo = COALESCE($2, ativo)
-       WHERE id=$3 RETURNING *`,
-      [nome||null, ativo!=null?ativo:null, req.params.id]
-    );
-    res.json(rows[0]);
-  } catch (e) {
-    res.status(500).json({ erro: 'Erro interno' });
-  }
+  const { rows } = await pool.query(
+    'UPDATE predios SET nome=COALESCE($1,nome), ativo=COALESCE($2,ativo) WHERE id=$3 RETURNING *',
+    [nome||null, ativo!=null?ativo:null, req.params.id]
+  );
+  res.json(rows[0]);
 });
 
-// ── USUÁRIOS ──────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// USUÁRIOS
+// ══════════════════════════════════════════════════════════════
 
-// GET /api/usuarios — lista membros (filtra por prédio se x-predio-id vier)
 app.get('/api/usuarios', auth, adminOnly, async (req, res) => {
   const pid = parseInt(req.headers['x-predio-id']);
   try {
     let rows;
     if (pid) {
       ({ rows } = await pool.query(
-        `SELECT u.id, u.nome, u.email, u.cargo, u.role, u.ativo
-         FROM usuarios u
-         JOIN usuario_predios up ON up.usuario_id=u.id
-         WHERE up.predio_id=$1 ORDER BY u.nome`,
+        `SELECT u.id,u.nome,u.email,u.cargo,u.role,u.ativo FROM usuarios u JOIN usuario_predios up ON up.usuario_id=u.id WHERE up.predio_id=$1 ORDER BY u.nome`,
         [pid]
       ));
     } else {
-      ({ rows } = await pool.query(
-        'SELECT id, nome, email, cargo, role, ativo FROM usuarios ORDER BY nome'
-      ));
+      ({ rows } = await pool.query('SELECT id,nome,email,cargo,role,ativo FROM usuarios ORDER BY nome'));
     }
     res.json(rows);
-  } catch (e) {
-    res.status(500).json({ erro: 'Erro interno' });
-  }
+  } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
 });
 
-// POST /api/usuarios — admin cria membro e vincula ao prédio atual
 app.post('/api/usuarios', auth, adminOnly, async (req, res) => {
   const { nome, email, senha, cargo, role, predio_ids } = req.body;
-  if (!nome || !email || !senha) return res.status(400).json({ erro: 'Nome, e-mail e senha obrigatórios' });
+  if (!nome||!email||!senha) return res.status(400).json({ erro: 'Nome, e-mail e senha obrigatórios' });
   if (senha.length < 6) return res.status(400).json({ erro: 'Senha mínimo 6 caracteres' });
-
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const hash = await bcrypt.hash(senha, 10);
     const { rows } = await client.query(
-      `INSERT INTO usuarios (nome, email, senha_hash, cargo, role)
-       VALUES ($1,$2,$3,$4,$5) RETURNING id, nome, email, cargo, role`,
+      'INSERT INTO usuarios (nome,email,senha_hash,cargo,role) VALUES ($1,$2,$3,$4,$5) RETURNING id,nome,email,cargo,role',
       [nome, email.toLowerCase().trim(), hash, cargo||null, role||'membro']
     );
     const u = rows[0];
-
-    // Vincula aos prédios informados
-    const pids = predio_ids && predio_ids.length ? predio_ids : [];
-    for (const pid of pids) {
-      await client.query(
-        'INSERT INTO usuario_predios (usuario_id, predio_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
-        [u.id, pid]
-      );
+    for (const pid of (predio_ids||[])) {
+      await client.query('INSERT INTO usuario_predios (usuario_id,predio_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [u.id, pid]);
     }
-
     await client.query('COMMIT');
     res.status(201).json(u);
-  } catch (e) {
+  } catch(e) {
     await client.query('ROLLBACK');
-    if (e.code === '23505') return res.status(409).json({ erro: 'E-mail já cadastrado' });
+    if (e.code==='23505') return res.status(409).json({ erro: 'E-mail já cadastrado' });
     res.status(500).json({ erro: 'Erro interno' });
-  } finally {
-    client.release();
-  }
+  } finally { client.release(); }
 });
 
-// DELETE /api/usuarios/:id — desativa (soft delete)
 app.delete('/api/usuarios/:id', auth, adminOnly, async (req, res) => {
-  if (parseInt(req.params.id) === req.user.id)
-    return res.status(400).json({ erro: 'Não pode remover a si mesmo' });
+  if (parseInt(req.params.id)===req.user.id) return res.status(400).json({ erro: 'Não pode remover a si mesmo' });
   await pool.query('UPDATE usuarios SET ativo=FALSE WHERE id=$1', [req.params.id]);
   res.json({ ok: true });
 });
 
-// ── TICKETS ───────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// TICKETS
+// ══════════════════════════════════════════════════════════════
 
-// GET /api/tickets
 app.get('/api/tickets', auth, comPredio, async (req, res) => {
-  const { rows } = await pool.query(
-    'SELECT * FROM tickets WHERE predio_id=$1 ORDER BY criado_em DESC',
-    [req.predio_id]
-  );
+  const { rows } = await pool.query('SELECT * FROM tickets WHERE predio_id=$1 ORDER BY criado_em DESC', [req.predio_id]);
   res.json(rows);
 });
 
-// POST /api/tickets
 app.post('/api/tickets', auth, comPredio, async (req, res) => {
   const { titulo, descricao, categoria, local, origem, prioridade, prazo, responsavel_id } = req.body;
-  if (!titulo || !categoria || !origem)
-    return res.status(400).json({ erro: 'Título, categoria e origem obrigatórios' });
-
+  if (!titulo||!categoria||!origem) return res.status(400).json({ erro: 'Título, categoria e origem obrigatórios' });
   try {
-    let responsavel_nome = null;
+    let responsavel_nome = null, responsavel_email = null;
     if (responsavel_id) {
-      const { rows } = await pool.query('SELECT nome FROM usuarios WHERE id=$1', [responsavel_id]);
-      responsavel_nome = rows[0]?.nome || null;
+      const { rows } = await pool.query('SELECT nome,email FROM usuarios WHERE id=$1', [responsavel_id]);
+      responsavel_nome  = rows[0]?.nome  || null;
+      responsavel_email = rows[0]?.email || null;
     }
-
     const { rows } = await pool.query(
-      `INSERT INTO tickets
-         (predio_id,titulo,descricao,categoria,local,origem,prioridade,
-          status,autor_id,autor_nome,responsavel_id,responsavel_nome,prazo)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'aberto',$8,$9,$10,$11,$12)
-       RETURNING *`,
-      [req.predio_id, titulo, descricao||null, categoria, local||null, origem,
-       prioridade||'Média', req.user.id, req.user.nome, responsavel_id||null, responsavel_nome, prazo||null]
+      `INSERT INTO tickets (predio_id,titulo,descricao,categoria,local,origem,prioridade,status,autor_id,autor_nome,responsavel_id,responsavel_nome,prazo)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'aberto',$8,$9,$10,$11,$12) RETURNING *`,
+      [req.predio_id, titulo, descricao||null, categoria, local||null, origem, prioridade||'Média', req.user.id, req.user.nome, responsavel_id||null, responsavel_nome, prazo||null]
     );
     const t = rows[0];
-
     await pool.query(
       'INSERT INTO ticket_historico (ticket_id,mensagem,autor_id,autor_nome) VALUES ($1,$2,$3,$4)',
       [t.id, `Aberto por ${req.user.nome} via ${origem}`, req.user.id, req.user.nome]
     );
-
+    // Email para o autor
+    enviarEmail(emailTicketAberto(t, req.user.email));
+    // Email para o responsável se diferente do autor
+    if (responsavel_email && responsavel_email !== req.user.email) {
+      enviarEmail({ ...emailTicketAberto(t, responsavel_email), subject: `[JFL] Ticket #${t.id} atribuído a você` });
+    }
     res.status(201).json(t);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ erro: 'Erro interno' });
-  }
+  } catch(e) { console.error(e); res.status(500).json({ erro: 'Erro interno' }); }
 });
 
-// PATCH /api/tickets/:id/status
 app.patch('/api/tickets/:id/status', auth, comPredio, async (req, res) => {
   const { status } = req.body;
   const validos = ['aberto','em andamento','feedback ao cliente','resolvido'];
   if (!validos.includes(status)) return res.status(400).json({ erro: 'Status inválido' });
-
   const { rows } = await pool.query(
     'UPDATE tickets SET status=$1,atualizado_em=NOW() WHERE id=$2 AND predio_id=$3 RETURNING *',
     [status, req.params.id, req.predio_id]
   );
   if (!rows[0]) return res.status(404).json({ erro: 'Não encontrado' });
-
+  const t = rows[0];
   await pool.query(
     'INSERT INTO ticket_historico (ticket_id,mensagem,autor_id,autor_nome) VALUES ($1,$2,$3,$4)',
     [req.params.id, `Status → ${status}`, req.user.id, req.user.nome]
   );
-
-  res.json(rows[0]);
+  // Notifica responsável se houver
+  if (t.responsavel_id && t.responsavel_id !== req.user.id) {
+    const { rows: ru } = await pool.query('SELECT email FROM usuarios WHERE id=$1', [t.responsavel_id]);
+    if (ru[0]?.email) enviarEmail(emailStatusAtualizado(t, status, req.user.nome, ru[0].email));
+  }
+  res.json(t);
 });
 
-// ── HISTÓRICO ────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// HISTÓRICO
+// ══════════════════════════════════════════════════════════════
 
 app.get('/api/tickets/:id/historico', auth, comPredio, async (req, res) => {
-  const { rows: tk } = await pool.query(
-    'SELECT id FROM tickets WHERE id=$1 AND predio_id=$2', [req.params.id, req.predio_id]
-  );
+  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2', [req.params.id, req.predio_id]);
   if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
-  const { rows } = await pool.query(
-    'SELECT * FROM ticket_historico WHERE ticket_id=$1 ORDER BY criado_em DESC', [req.params.id]
-  );
+  const { rows } = await pool.query('SELECT * FROM ticket_historico WHERE ticket_id=$1 ORDER BY criado_em DESC', [req.params.id]);
   res.json(rows);
 });
 
 app.post('/api/tickets/:id/historico', auth, comPredio, async (req, res) => {
   const { mensagem } = req.body;
   if (!mensagem) return res.status(400).json({ erro: 'Mensagem obrigatória' });
-  const { rows: tk } = await pool.query(
-    'SELECT id FROM tickets WHERE id=$1 AND predio_id=$2', [req.params.id, req.predio_id]
-  );
+  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2', [req.params.id, req.predio_id]);
   if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
   const { rows } = await pool.query(
     'INSERT INTO ticket_historico (ticket_id,mensagem,autor_id,autor_nome) VALUES ($1,$2,$3,$4) RETURNING *',
@@ -359,25 +371,21 @@ app.post('/api/tickets/:id/historico', auth, comPredio, async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
-// ── ATIVIDADES ───────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// ATIVIDADES
+// ══════════════════════════════════════════════════════════════
 
 app.get('/api/tickets/:id/atividades', auth, comPredio, async (req, res) => {
-  const { rows: tk } = await pool.query(
-    'SELECT id FROM tickets WHERE id=$1 AND predio_id=$2', [req.params.id, req.predio_id]
-  );
+  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2', [req.params.id, req.predio_id]);
   if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
-  const { rows } = await pool.query(
-    'SELECT * FROM ticket_atividades WHERE ticket_id=$1 ORDER BY criado_em ASC', [req.params.id]
-  );
+  const { rows } = await pool.query('SELECT * FROM ticket_atividades WHERE ticket_id=$1 ORDER BY criado_em ASC', [req.params.id]);
   res.json(rows);
 });
 
 app.post('/api/tickets/:id/atividades', auth, comPredio, async (req, res) => {
   const { titulo, responsavel_nome, prazo } = req.body;
   if (!titulo) return res.status(400).json({ erro: 'Título obrigatório' });
-  const { rows: tk } = await pool.query(
-    'SELECT id FROM tickets WHERE id=$1 AND predio_id=$2', [req.params.id, req.predio_id]
-  );
+  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2', [req.params.id, req.predio_id]);
   if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
   const { rows } = await pool.query(
     'INSERT INTO ticket_atividades (ticket_id,titulo,responsavel_nome,prazo,criado_por) VALUES ($1,$2,$3,$4,$5) RETURNING *',
@@ -388,16 +396,243 @@ app.post('/api/tickets/:id/atividades', auth, comPredio, async (req, res) => {
 
 app.patch('/api/atividades/:id/toggle', auth, async (req, res) => {
   const { rows } = await pool.query(
-    `UPDATE ticket_atividades
-     SET status = CASE WHEN status='concluida' THEN 'pendente' ELSE 'concluida' END
-     WHERE id=$1 RETURNING *`,
+    `UPDATE ticket_atividades SET status=CASE WHEN status='concluida' THEN 'pendente' ELSE 'concluida' END WHERE id=$1 RETURNING *`,
     [req.params.id]
   );
   if (!rows[0]) return res.status(404).json({ erro: 'Não encontrado' });
   res.json(rows[0]);
 });
 
-// ── STATS ─────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// FOTOS — upload e listagem
+// ══════════════════════════════════════════════════════════════
+
+app.post('/api/tickets/:id/fotos', auth, comPredio, upload.array('fotos', 10), async (req, res) => {
+  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2', [req.params.id, req.predio_id]);
+  if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
+  if (!req.files || !req.files.length) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
+
+  const inseridas = [];
+  for (const f of req.files) {
+    const { rows } = await pool.query(
+      'INSERT INTO ticket_fotos (ticket_id,nome_original,nome_arquivo,tamanho,mime_type,enviado_por) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [req.params.id, f.originalname, f.filename, f.size, f.mimetype, req.user.nome]
+    );
+    inseridas.push(rows[0]);
+  }
+  await pool.query(
+    'INSERT INTO ticket_historico (ticket_id,mensagem,autor_id,autor_nome) VALUES ($1,$2,$3,$4)',
+    [req.params.id, `${req.files.length} foto(s) anexada(s) por ${req.user.nome}`, req.user.id, req.user.nome]
+  );
+  res.status(201).json(inseridas);
+});
+
+app.get('/api/tickets/:id/fotos', auth, comPredio, async (req, res) => {
+  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2', [req.params.id, req.predio_id]);
+  if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
+  const { rows } = await pool.query('SELECT * FROM ticket_fotos WHERE ticket_id=$1 ORDER BY criado_em ASC', [req.params.id]);
+  res.json(rows);
+});
+
+app.delete('/api/fotos/:id', auth, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM ticket_fotos WHERE id=$1', [req.params.id]);
+  if (!rows[0]) return res.status(404).json({ erro: 'Não encontrado' });
+  const foto = rows[0];
+  // Remove arquivo do disco
+  const filePath = path.join(UPLOAD_DIR, foto.nome_arquivo);
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  await pool.query('DELETE FROM ticket_fotos WHERE id=$1', [req.params.id]);
+  res.json({ ok: true });
+});
+
+// ══════════════════════════════════════════════════════════════
+// RELATÓRIOS
+// ══════════════════════════════════════════════════════════════
+
+// Busca tickets com filtros opcionais
+async function buscarTicketsRelatorio(predio_id, { status, prioridade, de, ate } = {}) {
+  let q = 'SELECT * FROM tickets WHERE predio_id=$1';
+  const params = [predio_id];
+  if (status)     { params.push(status);     q += ` AND status=$${params.length}`; }
+  if (prioridade) { params.push(prioridade); q += ` AND prioridade=$${params.length}`; }
+  if (de)         { params.push(de);         q += ` AND criado_em::date>=$${params.length}`; }
+  if (ate)        { params.push(ate);        q += ` AND criado_em::date<=$${params.length}`; }
+  q += ' ORDER BY criado_em DESC';
+  const { rows } = await pool.query(q, params);
+  return rows;
+}
+
+// GET /api/relatorios/excel
+app.get('/api/relatorios/excel', auth, comPredio, async (req, res) => {
+  try {
+    const tickets = await buscarTicketsRelatorio(req.predio_id, req.query);
+    const { rows: predio } = await pool.query('SELECT nome FROM predios WHERE id=$1', [req.predio_id]);
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Operação JFL Inc';
+    const ws = wb.addWorksheet('Tickets');
+
+    // Colunas
+    ws.columns = [
+      { header: 'ID',          key: 'id',               width: 8  },
+      { header: 'Título',      key: 'titulo',            width: 40 },
+      { header: 'Status',      key: 'status',            width: 20 },
+      { header: 'Prioridade',  key: 'prioridade',        width: 14 },
+      { header: 'Categoria',   key: 'categoria',         width: 22 },
+      { header: 'Local',       key: 'local',             width: 20 },
+      { header: 'Origem',      key: 'origem',            width: 18 },
+      { header: 'Responsável', key: 'responsavel_nome',  width: 22 },
+      { header: 'Aberto por',  key: 'autor_nome',        width: 22 },
+      { header: 'Prazo',       key: 'prazo',             width: 14 },
+      { header: 'Criado em',   key: 'criado_em',         width: 20 },
+      { header: 'Descrição',   key: 'descricao',         width: 50 },
+    ];
+
+    // Header styling
+    ws.getRow(1).eachCell(cell => {
+      cell.fill   = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF1A1917' } };
+      cell.font   = { color:{ argb:'FFFFFFFF' }, bold:true, size:11 };
+      cell.border = { bottom:{ style:'thin', color:{ argb:'FF444444' } } };
+    });
+
+    // Cores por status
+    const statusColors = {
+      'aberto':               'FFEBF0F9',
+      'em andamento':         'FFFDF5E6',
+      'resolvido':            'FFEBF5EE',
+      'feedback ao cliente':  'FFF3EBFA',
+    };
+
+    tickets.forEach(t => {
+      const row = ws.addRow({
+        ...t,
+        prazo:     t.prazo     ? new Date(t.prazo).toLocaleDateString('pt-BR')     : '—',
+        criado_em: t.criado_em ? new Date(t.criado_em).toLocaleString('pt-BR')     : '—',
+        descricao: t.descricao || '—',
+        responsavel_nome: t.responsavel_nome || 'A definir',
+      });
+      const bgColor = statusColors[t.status] || 'FFFFFFFF';
+      row.eachCell(cell => {
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: bgColor } };
+        cell.alignment = { wrapText: true, vertical:'top' };
+      });
+    });
+
+    ws.autoFilter = { from:'A1', to:`L1` };
+
+    // Aba de resumo
+    const wsSumario = wb.addWorksheet('Resumo');
+    const contagens = {
+      total:      tickets.length,
+      aberto:     tickets.filter(t=>t.status==='aberto').length,
+      andamento:  tickets.filter(t=>t.status==='em andamento').length,
+      resolvido:  tickets.filter(t=>t.status==='resolvido').length,
+      feedback:   tickets.filter(t=>t.status==='feedback ao cliente').length,
+      alta:       tickets.filter(t=>t.prioridade==='Alta').length,
+    };
+    wsSumario.addRow(['Relatório de Tickets — ' + (predio.rows?.[0]?.nome||'')]);
+    wsSumario.addRow(['Gerado em', new Date().toLocaleString('pt-BR')]);
+    wsSumario.addRow([]);
+    wsSumario.addRow(['Indicador', 'Quantidade']);
+    wsSumario.addRow(['Total de tickets', contagens.total]);
+    wsSumario.addRow(['Em aberto',        contagens.aberto]);
+    wsSumario.addRow(['Em andamento',     contagens.andamento]);
+    wsSumario.addRow(['Resolvidos',       contagens.resolvido]);
+    wsSumario.addRow(['Feedback',         contagens.feedback]);
+    wsSumario.addRow(['Alta prioridade',  contagens.alta]);
+    wsSumario.getColumn(1).width = 24;
+    wsSumario.getColumn(2).width = 16;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="tickets-${Date.now()}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch(e) { console.error(e); res.status(500).json({ erro: 'Erro ao gerar Excel' }); }
+});
+
+// GET /api/relatorios/pdf
+app.get('/api/relatorios/pdf', auth, comPredio, async (req, res) => {
+  try {
+    const tickets = await buscarTicketsRelatorio(req.predio_id, req.query);
+    const { rows: predioRows } = await pool.query('SELECT nome FROM predios WHERE id=$1', [req.predio_id]);
+    const predioNome = predioRows[0]?.nome || 'Prédio';
+
+    const doc = new PDFDocument({ margin:40, size:'A4' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="tickets-${Date.now()}.pdf"`);
+    doc.pipe(res);
+
+    // Header
+    doc.rect(0,0,doc.page.width,70).fill('#1A1917');
+    doc.fillColor('#ffffff').fontSize(18).font('Helvetica-Bold').text('⬡ Operação JFL Inc', 40, 20);
+    doc.fontSize(11).font('Helvetica').text(`Relatório de Tickets — ${predioNome}`, 40, 44);
+    doc.fillColor('#1A1917').moveDown(2);
+
+    // Info
+    doc.fontSize(10).fillColor('#6B6860')
+      .text(`Gerado em: ${new Date().toLocaleString('pt-BR')}   |   Total: ${tickets.length} ticket(s)`, { align:'right' });
+    doc.moveDown(0.5);
+
+    // Resumo
+    const statuses = ['aberto','em andamento','resolvido','feedback ao cliente'];
+    const counts   = statuses.map(s => tickets.filter(t=>t.status===s).length);
+    doc.rect(40, doc.y, doc.page.width-80, 40).fill('#F0EEE8').stroke('#E2DED6');
+    const boxY = doc.y - 40;
+    const colW = (doc.page.width - 80) / 4;
+    statuses.forEach((s,i) => {
+      doc.fillColor('#6B6860').fontSize(9).text(s.toUpperCase(), 40+colW*i+8, boxY+6, { width:colW-8 });
+      doc.fillColor('#1A1917').fontSize(18).font('Helvetica-Bold').text(String(counts[i]), 40+colW*i+8, boxY+18, { width:colW-8 });
+    });
+    doc.font('Helvetica').moveDown(3.5);
+
+    // Tickets
+    const statusColors2 = { aberto:'#EBF0F9','em andamento':'#FDF5E6',resolvido:'#EBF5EE','feedback ao cliente':'#F3EBFA' };
+    const prioColors    = { Alta:'#C0392B', Média:'#92590A', Baixa:'#1E6B3C' };
+
+    tickets.forEach((t, idx) => {
+      if (doc.y > doc.page.height - 140) doc.addPage();
+
+      const cardY = doc.y;
+      const cardH = t.descricao ? 100 : 72;
+      doc.rect(40, cardY, doc.page.width-80, cardH)
+        .fill(statusColors2[t.status]||'#F9F9F7')
+        .stroke('#E2DED6');
+
+      // ID e título
+      doc.fillColor('#A09D98').fontSize(9).font('Helvetica').text(`#${t.id}`, 52, cardY+10);
+      doc.fillColor('#1A1917').fontSize(11).font('Helvetica-Bold').text(t.titulo, 52, cardY+22, { width: doc.page.width-160 });
+
+      // Tags de status e prioridade
+      const tagX = doc.page.width - 160;
+      doc.fontSize(9).fillColor(prioColors[t.prioridade]||'#1A1917')
+        .text(`● ${t.prioridade}`, tagX, cardY+10, { width:110, align:'right' });
+      doc.fillColor('#6B6860').text(t.status, tagX, cardY+22, { width:110, align:'right' });
+
+      // Meta row
+      const meta = [
+        t.categoria, t.local, t.responsavel_nome||'A definir',
+        t.prazo ? new Date(t.prazo).toLocaleDateString('pt-BR') : '',
+      ].filter(Boolean).join('  ·  ');
+      doc.font('Helvetica').fontSize(9).fillColor('#6B6860').text(meta, 52, cardY+42, { width: doc.page.width-110 });
+
+      if (t.descricao) {
+        doc.fontSize(9).fillColor('#1A1917').text(t.descricao, 52, cardY+58, { width: doc.page.width-110, ellipsis:true, height:28 });
+      }
+
+      doc.moveDown(0.3);
+    });
+
+    if (!tickets.length) {
+      doc.moveDown(2).fontSize(13).fillColor('#A09D98').text('Nenhum ticket encontrado com os filtros selecionados.', { align:'center' });
+    }
+
+    doc.end();
+  } catch(e) { console.error(e); res.status(500).json({ erro: 'Erro ao gerar PDF' }); }
+});
+
+// ══════════════════════════════════════════════════════════════
+// STATS
+// ══════════════════════════════════════════════════════════════
 
 app.get('/api/stats', auth, comPredio, async (req, res) => {
   const pid  = req.predio_id;
@@ -408,141 +643,86 @@ app.get('/api/stats', auth, comPredio, async (req, res) => {
     pool.query(`SELECT COUNT(*) FROM tickets WHERE predio_id=$1 AND status='resolvido'`, [pid]),
     pool.query(`SELECT COUNT(*) FROM tickets WHERE predio_id=$1 AND prazo::date=$2 AND status!='resolvido'`, [pid, hoje]),
   ]);
-  res.json({
-    aberto:    parseInt(a.rows[0].count),
-    andamento: parseInt(b.rows[0].count),
-    resolvido: parseInt(c.rows[0].count),
-    hoje:      parseInt(d.rows[0].count),
-  });
+  res.json({ aberto:parseInt(a.rows[0].count), andamento:parseInt(b.rows[0].count), resolvido:parseInt(c.rows[0].count), hoje:parseInt(d.rows[0].count) });
 });
 
 // ── SPA FALLBACK ──────────────────────────────────────────────
-app.get('*', (_, res) =>
-  res.sendFile(path.join(__dirname, 'public/index.html'))
-);
+app.get('*', (_, res) => res.sendFile(path.join(__dirname, 'public/index.html')));
 
-// ── AUTO-MIGRATE + SEED ───────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// AUTO-MIGRATE
+// ══════════════════════════════════════════════════════════════
 async function migrate() {
   const client = await pool.connect();
   try {
     console.log('🔄 Verificando banco de dados...');
-
     await client.query(`
       CREATE TABLE IF NOT EXISTS predios (
-        id        SERIAL PRIMARY KEY,
-        nome      TEXT NOT NULL,
-        slug      TEXT NOT NULL UNIQUE,
-        ativo     BOOLEAN DEFAULT TRUE,
-        criado_em TIMESTAMPTZ DEFAULT NOW()
+        id SERIAL PRIMARY KEY, nome TEXT NOT NULL, slug TEXT NOT NULL UNIQUE,
+        ativo BOOLEAN DEFAULT TRUE, criado_em TIMESTAMPTZ DEFAULT NOW()
       );
-
       CREATE TABLE IF NOT EXISTS usuarios (
-        id         SERIAL PRIMARY KEY,
-        nome       TEXT NOT NULL,
-        email      TEXT NOT NULL UNIQUE,
-        senha_hash TEXT NOT NULL,
-        cargo      TEXT,
-        role       TEXT NOT NULL DEFAULT 'membro'
-                     CHECK (role IN ('superadmin','admin','membro')),
-        ativo      BOOLEAN DEFAULT TRUE,
-        criado_em  TIMESTAMPTZ DEFAULT NOW()
+        id SERIAL PRIMARY KEY, nome TEXT NOT NULL, email TEXT NOT NULL UNIQUE,
+        senha_hash TEXT NOT NULL, cargo TEXT,
+        role TEXT NOT NULL DEFAULT 'membro' CHECK (role IN ('superadmin','admin','membro')),
+        ativo BOOLEAN DEFAULT TRUE, criado_em TIMESTAMPTZ DEFAULT NOW()
       );
-
       CREATE TABLE IF NOT EXISTS usuario_predios (
         usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
         predio_id  INTEGER NOT NULL REFERENCES predios(id)  ON DELETE CASCADE,
         PRIMARY KEY (usuario_id, predio_id)
       );
-
       CREATE TABLE IF NOT EXISTS tickets (
-        id               SERIAL PRIMARY KEY,
-        predio_id        INTEGER NOT NULL REFERENCES predios(id) ON DELETE CASCADE,
-        titulo           TEXT NOT NULL,
-        descricao        TEXT,
-        categoria        TEXT,
-        local            TEXT,
-        origem           TEXT,
-        prioridade       TEXT NOT NULL DEFAULT 'Média'
-                           CHECK (prioridade IN ('Baixa','Média','Alta')),
-        status           TEXT NOT NULL DEFAULT 'aberto'
-                           CHECK (status IN ('aberto','em andamento','feedback ao cliente','resolvido')),
-        autor_id         INTEGER REFERENCES usuarios(id),
-        autor_nome       TEXT,
-        responsavel_id   INTEGER REFERENCES usuarios(id),
-        responsavel_nome TEXT,
-        prazo            DATE,
-        criado_em        TIMESTAMPTZ DEFAULT NOW(),
-        atualizado_em    TIMESTAMPTZ DEFAULT NOW()
+        id SERIAL PRIMARY KEY, predio_id INTEGER NOT NULL REFERENCES predios(id) ON DELETE CASCADE,
+        titulo TEXT NOT NULL, descricao TEXT, categoria TEXT, local TEXT, origem TEXT,
+        prioridade TEXT NOT NULL DEFAULT 'Média' CHECK (prioridade IN ('Baixa','Média','Alta')),
+        status TEXT NOT NULL DEFAULT 'aberto' CHECK (status IN ('aberto','em andamento','feedback ao cliente','resolvido')),
+        autor_id INTEGER REFERENCES usuarios(id), autor_nome TEXT,
+        responsavel_id INTEGER REFERENCES usuarios(id), responsavel_nome TEXT,
+        prazo DATE, criado_em TIMESTAMPTZ DEFAULT NOW(), atualizado_em TIMESTAMPTZ DEFAULT NOW()
       );
-
       CREATE TABLE IF NOT EXISTS ticket_historico (
-        id         SERIAL PRIMARY KEY,
-        ticket_id  INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-        mensagem   TEXT NOT NULL,
-        autor_id   INTEGER REFERENCES usuarios(id),
-        autor_nome TEXT,
-        criado_em  TIMESTAMPTZ DEFAULT NOW()
+        id SERIAL PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+        mensagem TEXT NOT NULL, autor_id INTEGER REFERENCES usuarios(id),
+        autor_nome TEXT, criado_em TIMESTAMPTZ DEFAULT NOW()
       );
-
       CREATE TABLE IF NOT EXISTS ticket_atividades (
-        id               SERIAL PRIMARY KEY,
-        ticket_id        INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-        titulo           TEXT NOT NULL,
-        status           TEXT NOT NULL DEFAULT 'pendente'
-                           CHECK (status IN ('pendente','concluida')),
-        responsavel_nome TEXT,
-        prazo            DATE,
-        criado_por       TEXT,
-        criado_em        TIMESTAMPTZ DEFAULT NOW()
+        id SERIAL PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+        titulo TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente','concluida')),
+        responsavel_nome TEXT, prazo DATE, criado_por TEXT, criado_em TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS ticket_fotos (
+        id SERIAL PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+        nome_original TEXT NOT NULL, nome_arquivo TEXT NOT NULL UNIQUE,
+        tamanho INTEGER, mime_type TEXT, enviado_por TEXT,
+        criado_em TIMESTAMPTZ DEFAULT NOW()
       );
     `);
-
-    // Índices (ignora se já existem)
     await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_tickets_predio_status   ON tickets (predio_id, status);
-      CREATE INDEX IF NOT EXISTS idx_tickets_predio_prio     ON tickets (predio_id, prioridade);
-      CREATE INDEX IF NOT EXISTS idx_tickets_predio_prazo    ON tickets (predio_id, prazo);
-      CREATE INDEX IF NOT EXISTS idx_historico_ticket        ON ticket_historico (ticket_id);
-      CREATE INDEX IF NOT EXISTS idx_atividades_ticket       ON ticket_atividades (ticket_id);
-      CREATE INDEX IF NOT EXISTS idx_usuario_predios_uid     ON usuario_predios (usuario_id);
-      CREATE INDEX IF NOT EXISTS idx_usuario_predios_pid     ON usuario_predios (predio_id);
+      CREATE INDEX IF NOT EXISTS idx_tickets_predio_status ON tickets (predio_id, status);
+      CREATE INDEX IF NOT EXISTS idx_tickets_predio_prio   ON tickets (predio_id, prioridade);
+      CREATE INDEX IF NOT EXISTS idx_tickets_predio_prazo  ON tickets (predio_id, prazo);
+      CREATE INDEX IF NOT EXISTS idx_historico_ticket      ON ticket_historico (ticket_id);
+      CREATE INDEX IF NOT EXISTS idx_atividades_ticket     ON ticket_atividades (ticket_id);
+      CREATE INDEX IF NOT EXISTS idx_fotos_ticket          ON ticket_fotos (ticket_id);
+      CREATE INDEX IF NOT EXISTS idx_usuario_predios_uid   ON usuario_predios (usuario_id);
+      CREATE INDEX IF NOT EXISTS idx_usuario_predios_pid   ON usuario_predios (predio_id);
     `);
 
-    // Seed: prédio JML + superadmin (só se não existirem)
-    const { rows: predioRows } = await client.query(
-      "SELECT id FROM predios WHERE slug='jml'"
-    );
-    if (!predioRows.length) {
-      await client.query(
-        "INSERT INTO predios (nome, slug) VALUES ('JML', 'jml')"
-      );
-      console.log('🏢 Prédio JML criado');
-    }
+    const { rows: p } = await client.query("SELECT id FROM predios WHERE slug='jml'");
+    if (!p.length) { await client.query("INSERT INTO predios (nome,slug) VALUES ('JML','jml')"); console.log('🏢 JML criado'); }
 
-    const { rows: adminRows } = await client.query(
-      "SELECT id FROM usuarios WHERE email='admin@operacao.com'"
-    );
-    if (!adminRows.length) {
-      // Senha: admin123
+    const { rows: a } = await client.query("SELECT id FROM usuarios WHERE email='admin@operacao.com'");
+    if (!a.length) {
       const hash = await bcrypt.hash('admin123', 10);
-      await client.query(
-        `INSERT INTO usuarios (nome, email, senha_hash, cargo, role)
-         VALUES ('Administrador', 'admin@operacao.com', $1, 'TI', 'superadmin')`,
-        [hash]
-      );
-      console.log('👤 Superadmin criado — admin@operacao.com / admin123');
+      await client.query(`INSERT INTO usuarios (nome,email,senha_hash,cargo,role) VALUES ('Administrador','admin@operacao.com',$1,'TI','superadmin')`, [hash]);
+      console.log('👤 Superadmin criado');
     }
-
     console.log('✅ Banco pronto');
-  } catch (e) {
-    console.error('❌ Erro na migração:', e.message);
-    throw e;
-  } finally {
-    client.release();
-  }
+  } catch(e) { console.error('❌ Migração:', e.message); throw e; }
+  finally { client.release(); }
 }
 
-// ── START ─────────────────────────────────────────────────────
 migrate()
-  .then(() => app.listen(PORT, () => console.log(`🚀 Servidor na porta ${PORT}`)))
+  .then(() => app.listen(PORT, () => console.log(`🚀 Porta ${PORT}`)))
   .catch(e => { console.error('Falha fatal:', e.message); process.exit(1); });
