@@ -6,6 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>Operação JFL Inc</title>
+<!-- BUILD v2.1 FOTOS -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -594,6 +595,7 @@ const DEL   = p    => api('DELETE', p);
 // INIT
 // ════════════════════════════════════════════════
 window.addEventListener('load', async () => {
+  console.log('🚀 App v2.1 - fotos ativas');
   if (!token) { showPage('login'); return; }
   try {
     const me = await api('GET', '/api/auth/me');
