@@ -239,16 +239,26 @@ app.patch('/api/predios/:id', auth, superOnly, async (req, res) => {
 // USUÁRIOS
 // ══════════════════════════════════════════════════════════════
 
-app.get('/api/usuarios', auth, adminOnly, async (req, res) => {
+app.get('/api/usuarios', auth, async (req, res) => {
   const pid = parseInt(req.headers['x-predio-id']);
+  const isAdmin = ['superadmin','admin'].includes(req.user.role);
   try {
     let rows;
     if (pid) {
-      ({ rows } = await pool.query(
-        `SELECT u.id,u.nome,u.email,u.cargo,u.role,u.ativo FROM usuarios u JOIN usuario_predios up ON up.usuario_id=u.id WHERE up.predio_id=$1 ORDER BY u.nome`,
-        [pid]
-      ));
+      // Admins veem tudo; membros veem só nome+cargo do prédio (para select de responsável)
+      if (isAdmin) {
+        ({ rows } = await pool.query(
+          `SELECT u.id,u.nome,u.email,u.cargo,u.role,u.ativo FROM usuarios u JOIN usuario_predios up ON up.usuario_id=u.id WHERE up.predio_id=$1 ORDER BY u.nome`,
+          [pid]
+        ));
+      } else {
+        ({ rows } = await pool.query(
+          `SELECT u.id,u.nome,u.cargo FROM usuarios u JOIN usuario_predios up ON up.usuario_id=u.id WHERE up.predio_id=$1 AND u.ativo=TRUE ORDER BY u.nome`,
+          [pid]
+        ));
+      }
     } else {
+      if (!isAdmin) return res.status(403).json({ erro: 'Acesso negado' });
       ({ rows } = await pool.query('SELECT id,nome,email,cargo,role,ativo FROM usuarios ORDER BY nome'));
     }
     res.json(rows);
