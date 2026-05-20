@@ -24,7 +24,6 @@
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html{-webkit-text-size-adjust:100%;}
-  
 body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;}
 
 /* ── FIELDS ── */
@@ -933,9 +932,9 @@ async function openDetail(id) {
     <div style="height:20px;"></div>
   `;
   // Substitui TICKETID pelo id real
-  document.getElementById('detail-body').innerHTML = detailHtml.replaceAll('TICKETID', id);
-  // Carrega fotos assincronamente
-  carregarFotos(id);
+  document.getElementById('detail-body').innerHTML = detailHtml.replaceAll('TICKETID', String(id));
+  // Carrega fotos assincronamente após render
+  setTimeout(() => carregarFotos(id), 50);
 }
 
 async function updateStatus(id,status) {
