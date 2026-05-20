@@ -713,7 +713,11 @@ function fazerLogout() {
 let stats = {};
 async function loadStats()     { stats = await GET('/api/stats'); }
 async function loadTickets()   { allTickets = await GET('/api/tickets'); }
-async function loadMembros()   { membersList = await GET('/api/usuarios'); populateMemberSelect(); }
+async function loadMembros() {
+  try { membersList = await GET('/api/usuarios'); }
+  catch(e) { membersList = []; }
+  populateMemberSelect();
+}
 async function loadAllPredios(){ allPredios  = await api('GET','/api/predios'); renderPrediosList(); }
 
 function populateMemberSelect() {
@@ -1076,6 +1080,11 @@ async function carregarFotos(ticketId) {
       </div>`;
     }).join('');
   } catch(e) { console.error('Fotos:', e.message); }
+}
+
+function triggerFotoUpload(ticketId) {
+  const el = document.getElementById('foto-input-' + ticketId);
+  if (el) el.click();
 }
 
 async function uploadFotos(ticketId, input) {
