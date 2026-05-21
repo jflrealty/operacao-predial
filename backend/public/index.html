@@ -505,7 +505,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
       <div class="field">
         <label>Fotos / Anexos</label>
         <div class="upload-area" onclick="document.getElementById('n-fotos').click()">
-          <input type="file" id="n-fotos" accept="image/*,.pdf" multiple style="display:none;">
+          <input type="file" id="n-fotos" accept="image/*,.pdf" multiple capture="environment" style="display:none;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           <p>Toque para anexar fotos ou PDFs</p>
         </div>
@@ -941,7 +941,7 @@ async function openDetail(id) {
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;">📷 Fotos</div>
       <button class="btn btn-ghost btn-sm" onclick="triggerFotoUpload(TICKETID)">+ Anexar</button>
     </div>
-    <input type="file" id="foto-input-TICKETID" accept="image/*,.pdf" multiple style="display:none;" onchange="uploadFotos(TICKETID,this)">
+    <input type="file" id="foto-input-TICKETID" accept="image/*,.pdf" multiple capture="environment" style="display:none;" onchange="uploadFotos(TICKETID,this)">
     <div id="fotos-grid-TICKETID" class="fotos-grid"></div>
     <div id="fotos-msg-TICKETID" style="font-size:12px;color:var(--text2);margin-bottom:4px;"></div>
     <div class="divider"></div>
