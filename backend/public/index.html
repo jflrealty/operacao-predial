@@ -503,13 +503,13 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
       </div>
       <div class="field"><label>Responsável</label><select id="n-resp"><option value="">A definir</option></select></div>
       <div class="field">
-        <label>Fotos / Anexos</label>
-        <div class="upload-area" onclick="document.getElementById('n-fotos').click()">
-          <input type="file" id="n-fotos" accept="image/*,.pdf" multiple capture="environment" style="display:none;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          <p>Toque para anexar fotos ou PDFs</p>
-        </div>
-        <div id="n-fotos-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>
+        <label>Fotos / Anexos <span id="n-fotos-count" style="font-weight:400;color:var(--text3);">0/10</span></label>
+        <input type="file" id="n-fotos" accept="image/*,application/pdf,.pdf" multiple style="display:none;">
+        <div id="n-fotos-preview" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px;margin-bottom:8px;"></div>
+        <button type="button" class="btn btn-ghost btn-sm" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;" onclick="document.getElementById('n-fotos').click()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Câmera / Biblioteca / Arquivos
+        </button>
       </div>
       <button class="btn btn-primary" onclick="criarTicket()">Abrir ticket</button>
       <div id="n-msg" style="margin-top:10px;font-size:13px;text-align:center;"></div>
@@ -843,11 +843,10 @@ async function criarTicket() {
   try {
     const ticket = await POST('/api/tickets',{ titulo,descricao:desc,categoria:cat,local,origem,prioridade:prio,prazo,responsavel_id:respId });
     // Upload fotos se houver
-    const fotosInput = document.getElementById('n-fotos');
-    if (fotosInput && fotosInput.files.length > 0) {
-      msg.textContent = `Enviando ${fotosInput.files.length} foto(s)...`;
+    if (nFotosFiles.length > 0) {
+      msg.textContent = `Enviando ${nFotosFiles.length} foto(s)...`;
       const fd = new FormData();
-      for (const f of fotosInput.files) fd.append('fotos', f);
+      for (const f of nFotosFiles) fd.append('fotos', f);
       await fetch(`/api/tickets/${ticket.id}/fotos`, {
         method:'POST',
         headers:{'Authorization':'Bearer '+token,'x-predio-id':String(predioAtivo.id)},
@@ -859,7 +858,8 @@ async function criarTicket() {
     document.getElementById('n-prio').value='Média';
     document.getElementById('n-resp').value='';
     document.getElementById('n-fotos').value='';
-    document.getElementById('n-fotos-preview').innerHTML='';
+    nFotosFiles = [];
+    renderNFotosPreview();
     await loadStats(); await loadTickets(); renderDashboard(); renderList();
     setTimeout(()=>{ msg.textContent=''; closeOverlayById('overlay-novo'); },1200);
   } catch(e) { msg.className='msg-error'; msg.textContent=e.message; }
@@ -941,7 +941,7 @@ async function openDetail(id) {
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;">📷 Fotos</div>
       <button class="btn btn-ghost btn-sm" onclick="triggerFotoUpload(TICKETID)">+ Anexar</button>
     </div>
-    <input type="file" id="foto-input-TICKETID" accept="image/*,.pdf" multiple capture="environment" style="display:none;" onchange="uploadFotos(TICKETID,this)">
+    <input type="file" id="foto-input-TICKETID" accept="image/*,.pdf" multiple style="display:none;" onchange="uploadFotos(TICKETID,this)">
     <div id="fotos-grid-TICKETID" class="fotos-grid"></div>
     <div id="fotos-msg-TICKETID" style="font-size:12px;color:var(--text2);margin-bottom:4px;"></div>
     <div class="divider"></div>
@@ -1157,12 +1157,59 @@ function openAddPredio(){
   document.getElementById('overlay-predio-novo').classList.add('open');
 }
 // Auto-gera slug a partir do nome
+// ════════════════════════════════════════════════
+// FOTOS NO FORM DE NOVO TICKET
+// ════════════════════════════════════════════════
+let nFotosFiles = [];
+
+function renderNFotosPreview() {
+  const preview = document.getElementById('n-fotos-preview');
+  const countEl = document.getElementById('n-fotos-count');
+  if (!preview) return;
+  if (countEl) countEl.textContent = nFotosFiles.length + '/10';
+  preview.innerHTML = nFotosFiles.map((f, i) => {
+    const isImg = f.type.startsWith('image/');
+    const ext = f.name.split('.').pop().toUpperCase();
+    const name = f.name.length > 12 ? f.name.slice(0,10)+'…' : f.name;
+    if (isImg) {
+      const url = URL.createObjectURL(f);
+      return `<div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--surface2);border:1px solid var(--border);">
+        <img src="${url}" style="width:100%;height:100%;object-fit:cover;">
+        <button onclick="removerNFoto(${i})" style="position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.6);border:none;color:#fff;font-size:13px;cursor:pointer;line-height:1;">×</button>
+      </div>`;
+    } else {
+      return `<div style="position:relative;aspect-ratio:1;border-radius:8px;background:var(--surface2);border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px;gap:3px;text-align:center;">
+        <div style="font-size:12px;font-weight:700;color:var(--accent);">${ext}</div>
+        <div style="font-size:10px;color:var(--text2);word-break:break-all;">${name}</div>
+        <button onclick="removerNFoto(${i})" style="position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.12);border:none;color:var(--text);font-size:13px;cursor:pointer;line-height:1;">×</button>
+      </div>`;
+    }
+  }).join('');
+}
+
+function removerNFoto(idx) {
+  nFotosFiles.splice(idx, 1);
+  renderNFotosPreview();
+}
+
 document.addEventListener('DOMContentLoaded',()=>{
   const nomeEl=document.getElementById('np-nome');
   const slugEl=document.getElementById('np-slug');
   if(nomeEl&&slugEl){
     nomeEl.addEventListener('input',()=>{
       slugEl.value=nomeEl.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
+    });
+  }
+  // Listener para acumular fotos no form de novo ticket
+  const fotosInput = document.getElementById('n-fotos');
+  if (fotosInput) {
+    fotosInput.addEventListener('change', () => {
+      [...fotosInput.files].forEach(f => {
+        if (nFotosFiles.length < 10 && !nFotosFiles.find(x => x.name===f.name && x.size===f.size)) {
+          nFotosFiles.push(f);
+        }
+      });
+      renderNFotosPreview();
     });
   }
 });
