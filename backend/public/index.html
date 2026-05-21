@@ -502,6 +502,15 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         <div class="field"><label>Prazo previsto</label><input type="date" id="n-prazo"></div>
       </div>
       <div class="field"><label>Responsável</label><select id="n-resp"><option value="">A definir</option></select></div>
+      <div class="field">
+        <label>Fotos / Anexos</label>
+        <div class="upload-area" onclick="document.getElementById('n-fotos').click()">
+          <input type="file" id="n-fotos" accept="image/*,.pdf" multiple style="display:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <p>Toque para anexar fotos ou PDFs</p>
+        </div>
+        <div id="n-fotos-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>
+      </div>
       <button class="btn btn-primary" onclick="criarTicket()">Abrir ticket</button>
       <div id="n-msg" style="margin-top:10px;font-size:13px;text-align:center;"></div>
     </div>
@@ -832,11 +841,25 @@ async function criarTicket() {
   if (!origem||!cat||!desc) { msg.className='msg-error'; msg.textContent='Preencha origem, categoria e descrição.'; return; }
   const titulo = cat + (local?' – '+local:'');
   try {
-    await POST('/api/tickets',{ titulo,descricao:desc,categoria:cat,local,origem,prioridade:prio,prazo,responsavel_id:respId });
+    const ticket = await POST('/api/tickets',{ titulo,descricao:desc,categoria:cat,local,origem,prioridade:prio,prazo,responsavel_id:respId });
+    // Upload fotos se houver
+    const fotosInput = document.getElementById('n-fotos');
+    if (fotosInput && fotosInput.files.length > 0) {
+      msg.textContent = `Enviando ${fotosInput.files.length} foto(s)...`;
+      const fd = new FormData();
+      for (const f of fotosInput.files) fd.append('fotos', f);
+      await fetch(`/api/tickets/${ticket.id}/fotos`, {
+        method:'POST',
+        headers:{'Authorization':'Bearer '+token,'x-predio-id':String(predioAtivo.id)},
+        body: fd,
+      });
+    }
     msg.className='msg-ok'; msg.textContent='✓ Ticket aberto!';
     ['n-origem','n-cat','n-desc','n-local','n-prazo'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('n-prio').value='Média';
     document.getElementById('n-resp').value='';
+    document.getElementById('n-fotos').value='';
+    document.getElementById('n-fotos-preview').innerHTML='';
     await loadStats(); await loadTickets(); renderDashboard(); renderList();
     setTimeout(()=>{ msg.textContent=''; closeOverlayById('overlay-novo'); },1200);
   } catch(e) { msg.className='msg-error'; msg.textContent=e.message; }
