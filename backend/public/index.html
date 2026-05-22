@@ -597,7 +597,16 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         </select>
       </div>
       <div class="field"><label>Descrição</label><textarea id="n-desc" placeholder="O que aconteceu?"></textarea></div>
-      <div class="field"><label>Local / Unidade</label><input type="text" id="n-local" placeholder="Apto 204, Área comum..."></div>
+      <div class="field">
+        <label>Unidade</label>
+        <select id="n-unidade" onchange="selecionarUnidade(this.value)">
+          <option value="">Selecionar unidade...</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Local / Complemento</label>
+        <input type="text" id="n-local" placeholder="Ex: Área comum, Corredor, Garagem...">
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="field"><label>Prioridade</label>
           <select id="n-prio"><option>Baixa</option><option selected>Média</option><option>Alta</option></select>
@@ -831,6 +840,7 @@ async function entrarNoApp() {
   document.querySelectorAll('.superadmin-only').forEach(el => el.style.display = isSuper ? '' : 'none');
 
   await Promise.all([loadStats(), loadTickets(), loadMembros(), isAdmin && loadAllPredios()]);
+  carregarUnidadesForm();
   renderDashboard();
   renderList();
 }
@@ -966,13 +976,37 @@ function setFilter(f, el) {
 function showNewTicket() {
   document.getElementById('n-msg').textContent='';
   document.getElementById('n-autor').value = currentUser.nome + (currentUser.cargo?' – '+currentUser.cargo:'');
+  carregarUnidadesForm();
   document.getElementById('overlay-novo').classList.add('open');
+}
+
+let unidadesList = [];
+
+async function carregarUnidadesForm() {
+  const sel = document.getElementById('n-unidade');
+  if (!sel) return;
+  try {
+    unidadesList = await GET('/api/unidades');
+    sel.innerHTML = '<option value="">Selecionar unidade...</option>' +
+      unidadesList.map(u => `<option value="${u.label}">${u.label}</option>`).join('');
+  } catch(e) {
+    sel.innerHTML = '<option value="">Sem unidades cadastradas</option>';
+  }
+}
+
+function selecionarUnidade(label) {
+  // Se selecionou uma unidade, limpa o campo de local/complemento
+  if (label) {
+    document.getElementById('n-local').placeholder = 'Ex: Área comum, corredor, garagem...';
+  }
 }
 async function criarTicket() {
   const origem = document.getElementById('n-origem').value;
   const cat    = document.getElementById('n-cat').value;
   const desc   = document.getElementById('n-desc').value.trim();
-  const local  = document.getElementById('n-local').value.trim();
+  const unidade = document.getElementById('n-unidade').value;
+  const localComp = document.getElementById('n-local').value.trim();
+  const local = unidade ? (localComp ? `${unidade} — ${localComp}` : unidade) : localComp;
   const prio   = document.getElementById('n-prio').value;
   const prazo  = document.getElementById('n-prazo').value || null;
   const respId = document.getElementById('n-resp').value || null;
@@ -997,6 +1031,8 @@ async function criarTicket() {
     document.getElementById('n-prio').value='Média';
     document.getElementById('n-resp').value='';
     document.getElementById('n-fotos').value='';
+    document.getElementById('n-unidade').value='';
+    document.getElementById('n-local').value='';
     nFotosFiles = [];
     renderNFotosPreview();
     await loadStats(); await loadTickets(); renderDashboard(); renderList();
