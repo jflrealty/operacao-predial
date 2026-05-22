@@ -139,6 +139,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .badge-andamento{background:var(--amber-bg);color:var(--amber);}
 .badge-resolvido{background:var(--green-bg);color:var(--green);}
 .badge-feedback{background:var(--purple-bg);color:var(--purple);}
+.badge-cancelado{background:var(--surface2);color:var(--text3);}
 .prio-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0;}
 .prio-Alta{background:var(--red);}
 .prio-Média{background:var(--amber);}
@@ -882,8 +883,8 @@ function populateMemberSelect() {
 // RENDER HELPERS
 // ════════════════════════════════════════════════
 function statusBadge(s) {
-  const m={aberto:'badge-aberto','em andamento':'badge-andamento',resolvido:'badge-resolvido','feedback ao cliente':'badge-feedback'};
-  const l={aberto:'Aberto','em andamento':'Em andamento',resolvido:'Resolvido','feedback ao cliente':'Feedback'};
+  const m={aberto:'badge-aberto','em andamento':'badge-andamento',resolvido:'badge-resolvido','feedback ao cliente':'badge-feedback',cancelado:'badge-cancelado'};
+  const l={aberto:'Aberto','em andamento':'Em andamento',resolvido:'Resolvido','feedback ao cliente':'Feedback',cancelado:'Cancelado'};
   return `<span class="badge ${m[s]||'badge-aberto'}">${l[s]||s}</span>`;
 }
 function prioBadge(p) {
@@ -943,8 +944,8 @@ function renderDashboard() {
   document.getElementById('s-andamento').textContent = stats.andamento ?? '—';
   document.getElementById('s-resolvido').textContent = stats.resolvido ?? '—';
   document.getElementById('s-hoje').textContent      = stats.hoje      ?? '—';
-  const alta   = allTickets.filter(t => t.prioridade==='Alta' && t.status!=='resolvido');
-  const prazoH = allTickets.filter(t => t.prazo && t.prazo.split('T')[0]===hoje && t.status!=='resolvido');
+  const alta   = allTickets.filter(t => t.prioridade==='Alta' && !['resolvido','cancelado'].includes(t.status));
+  const prazoH = allTickets.filter(t => t.prazo && t.prazo.split('T')[0]===hoje && !['resolvido','cancelado'].includes(t.status));
   document.getElementById('dash-alta').innerHTML  = alta.length   ? alta.map(ticketCard).join('')   : emptyState('Sem tickets de alta prioridade.');
   document.getElementById('dash-hoje').innerHTML  = prazoH.length ? prazoH.map(ticketCard).join('') : emptyState('Sem prazos para hoje.');
 }
@@ -1083,12 +1084,40 @@ async function openDetail(id) {
     </div>
     ${t.descricao?`<div style="background:var(--surface2);border-radius:var(--radius);padding:12px 14px;font-size:14px;line-height:1.6;margin-bottom:4px;">${t.descricao}</div>`:''}
     <div class="divider"></div>
-    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Atualizar status</div>
-    <div class="status-pills">
-      <button class="status-pill ${t.status==='aberto'?'sel-aberto':''}" onclick="updateStatus(${id},'aberto')">Aberto</button>
-      <button class="status-pill ${t.status==='em andamento'?'sel-andamento':''}" onclick="updateStatus(${id},'em andamento')">Em andamento</button>
-      <button class="status-pill ${t.status==='feedback ao cliente'?'sel-feedback':''}" onclick="updateStatus(${id},'feedback ao cliente')">Feedback</button>
-      <button class="status-pill ${t.status==='resolvido'?'sel-resolvido':''}" onclick="updateStatus(${id},'resolvido')">Resolvido</button>
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Ações rápidas</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      ${t.status==='aberto' ? `
+        <button onclick="updateStatus(${id},'em andamento')" style="flex:1;min-width:120px;padding:12px 16px;border-radius:var(--radius);border:none;background:var(--amber-bg);color:var(--amber);font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+          ▶ Capturar
+        </button>
+        <button onclick="updateStatus(${id},'cancelado')" style="padding:12px 16px;border-radius:var(--radius);border:1px solid var(--border);background:none;color:var(--text3);font-family:var(--font);font-size:14px;cursor:pointer;">
+          ✕ Cancelar
+        </button>
+      ` : ''}
+      ${t.status==='em andamento' ? `
+        <button onclick="updateStatus(${id},'resolvido')" style="flex:1;min-width:120px;padding:12px 16px;border-radius:var(--radius);border:none;background:var(--green-bg);color:var(--green);font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+          ✓ Encerrar
+        </button>
+        <button onclick="updateStatus(${id},'feedback ao cliente')" style="padding:12px 16px;border-radius:var(--radius);border:none;background:var(--purple-bg);color:var(--purple);font-family:var(--font);font-size:14px;cursor:pointer;">
+          💬 Feedback
+        </button>
+        <button onclick="updateStatus(${id},'cancelado')" style="padding:12px 16px;border-radius:var(--radius);border:1px solid var(--border);background:none;color:var(--text3);font-family:var(--font);font-size:14px;cursor:pointer;">
+          ✕ Cancelar
+        </button>
+      ` : ''}
+      ${t.status==='feedback ao cliente' ? `
+        <button onclick="updateStatus(${id},'em andamento')" style="flex:1;min-width:120px;padding:12px 16px;border-radius:var(--radius);border:none;background:var(--amber-bg);color:var(--amber);font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;">
+          ↩ Retomar
+        </button>
+        <button onclick="updateStatus(${id},'resolvido')" style="padding:12px 16px;border-radius:var(--radius);border:none;background:var(--green-bg);color:var(--green);font-family:var(--font);font-size:14px;cursor:pointer;">
+          ✓ Encerrar
+        </button>
+      ` : ''}
+      ${t.status==='resolvido' || t.status==='cancelado' ? `
+        <button onclick="updateStatus(${id},'aberto')" style="flex:1;min-width:120px;padding:12px 16px;border-radius:var(--radius);border:none;background:var(--blue-bg);color:var(--blue);font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+          ↺ Reabrir
+        </button>
+      ` : ''}
     </div>
     <div style="margin-top:16px;">
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Registrar update</div>
