@@ -920,6 +920,12 @@ async function migrate() {
     `);
     // Adiciona must_change_password em usuários existentes se não existir
     await client.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE`);
+    // Atualiza constraint de status para incluir 'cancelado'
+    await client.query(`
+      ALTER TABLE tickets DROP CONSTRAINT IF EXISTS tickets_status_check;
+      ALTER TABLE tickets ADD CONSTRAINT tickets_status_check
+        CHECK (status IN ('aberto','em andamento','feedback ao cliente','resolvido','cancelado'));
+    `);
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_tickets_predio_status ON tickets(predio_id,status);
       CREATE INDEX IF NOT EXISTS idx_tickets_predio_prio   ON tickets(predio_id,prioridade);
