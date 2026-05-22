@@ -720,6 +720,74 @@ app.get('/api/relatorios/pdf', auth, comPredio, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
+// SLA CONFIG
+// ══════════════════════════════════════════════════════════════
+
+// GET /api/sla — retorna config SLA do prédio
+app.get('/api/sla', auth, comPredio, async (req, res) => {
+  const { rows } = await pool.query(
+    'SELECT categoria, prazo_horas FROM sla_config WHERE predio_id=$1 ORDER BY categoria',
+    [req.predio_id]
+  );
+  res.json(rows);
+});
+
+// PUT /api/sla — salva config SLA (upsert por categoria)
+app.put('/api/sla', auth, comPredio, adminOnly, async (req, res) => {
+  const { configs } = req.body; // [{ categoria, prazo_horas }]
+  if (!Array.isArray(configs)) return res.status(400).json({ erro: 'configs deve ser array' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const c of configs) {
+      if (!c.categoria || !c.prazo_horas) continue;
+      await client.query(
+        `INSERT INTO sla_config (predio_id, categoria, prazo_horas)
+         VALUES ($1,$2,$3)
+         ON CONFLICT (predio_id, categoria) DO UPDATE SET prazo_horas=EXCLUDED.prazo_horas`,
+        [req.predio_id, c.categoria, parseInt(c.prazo_horas)]
+      );
+    }
+    await client.query('COMMIT');
+    const { rows } = await client.query(
+      'SELECT categoria, prazo_horas FROM sla_config WHERE predio_id=$1 ORDER BY categoria',
+      [req.predio_id]
+    );
+    res.json(rows);
+  } catch(e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ erro: 'Erro interno' });
+  } finally { client.release(); }
+});
+
+// GET /api/sla/:categoria — retorna prazo sugerido para uma categoria
+app.get('/api/sla/:categoria', auth, comPredio, async (req, res) => {
+  const { rows } = await pool.query(
+    'SELECT prazo_horas FROM sla_config WHERE predio_id=$1 AND categoria=$2',
+    [req.predio_id, decodeURIComponent(req.params.categoria)]
+  );
+  if (!rows[0]) return res.json({ prazo_horas: null, prazo_data: null });
+  const horas = rows[0].prazo_horas;
+  const prazoData = new Date(Date.now() + horas * 60 * 60 * 1000).toISOString().split('T')[0];
+  res.json({ prazo_horas: horas, prazo_data: prazoData });
+});
+
+// ── PERFIL DO USUÁRIO ──────────────────────────────────────────
+
+// PATCH /api/auth/perfil — atualiza nome e cargo
+app.patch('/api/auth/perfil', auth, async (req, res) => {
+  const { nome, cargo } = req.body;
+  if (!nome || !nome.trim()) return res.status(400).json({ erro: 'Nome obrigatório' });
+  try {
+    const { rows } = await pool.query(
+      'UPDATE usuarios SET nome=$1, cargo=$2 WHERE id=$3 RETURNING id,nome,email,cargo,role',
+      [nome.trim(), cargo?.trim()||null, req.user.id]
+    );
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
+});
+
+// ══════════════════════════════════════════════════════════════
 // STATS
 // ══════════════════════════════════════════════════════════════
 
@@ -819,6 +887,13 @@ async function migrate() {
         id SERIAL PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
         nome_original TEXT NOT NULL, nome_arquivo TEXT NOT NULL UNIQUE,
         tamanho INTEGER, mime_type TEXT, enviado_por TEXT, criado_em TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS sla_config (
+        id SERIAL PRIMARY KEY,
+        predio_id INTEGER NOT NULL REFERENCES predios(id) ON DELETE CASCADE,
+        categoria TEXT NOT NULL,
+        prazo_horas INTEGER NOT NULL DEFAULT 48,
+        UNIQUE (predio_id, categoria)
       );
     `);
     // Adiciona must_change_password em usuários existentes se não existir
