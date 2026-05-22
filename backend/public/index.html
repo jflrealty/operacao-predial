@@ -592,11 +592,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
   <div class="drawer">
     <div class="drawer-handle"></div>
     <div class="drawer-body">
-      <div class="drawer-title">Adicionar membro</div>
-      <div class="field"><label>Nome completo</label><input type="text" id="m-nome" placeholder="Carlos Silva"></div>
-      <div class="field"><label>Cargo / Setor</label><input type="text" id="m-cargo" placeholder="Manutenção"></div>
-      <div class="field"><label>E-mail</label><input type="email" id="m-email"></div>
-      <div class="field"><label>Senha inicial</label><input type="text" id="m-pass" placeholder="mínimo 6 caracteres"></div>
+      <div class="drawer-title">Enviar convite</div>
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:12px 14px;font-size:13px;color:var(--text2);margin-bottom:18px;line-height:1.6;">
+        📧 A pessoa receberá um e-mail com o link de acesso e uma senha temporária. No primeiro login ela será solicitada a criar uma nova senha.
+      </div>
+      <div class="field"><label>E-mail</label><input type="email" id="m-email" placeholder="fulano@email.com"></div>
       <div class="field"><label>Perfil</label>
         <select id="m-role">
           <option value="membro">Membro (operação)</option>
@@ -604,12 +604,12 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
           <option value="superadmin">Superadmin</option>
         </select>
       </div>
-      <div class="field" id="m-predios-field">
+      <div class="field">
         <label>Prédios com acesso</label>
         <div class="check-list" id="m-predios-list"></div>
         <div style="font-size:12px;color:var(--text2);">Admins e superadmins têm acesso a todos automaticamente.</div>
       </div>
-      <button class="btn btn-primary" onclick="adicionarMembro()">Criar acesso</button>
+      <button class="btn btn-primary" onclick="adicionarMembro()">📧 Enviar convite</button>
       <div id="m-msg" style="margin-top:10px;font-size:13px;text-align:center;"></div>
     </div>
   </div>
@@ -1103,33 +1103,29 @@ async function toggleAtividade(atvId,tid){
 // TEAM
 // ════════════════════════════════════════════════
 function openAddMember() {
-  ['m-nome','m-cargo','m-email','m-pass'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('m-email').value='';
   document.getElementById('m-role').value='membro';
   document.getElementById('m-msg').textContent='';
-  // Preenche checkboxes de prédios
   const listEl=document.getElementById('m-predios-list');
   listEl.innerHTML=allPredios.map(p=>`
     <label class="check-item">
       <input type="checkbox" value="${p.id}" ${p.id===predioAtivo.id?'checked':''}>
-      <span>${p.nome}</span>
+      <label>${p.nome}</label>
     </label>`).join('');
   document.getElementById('overlay-member').classList.add('open');
 }
 async function adicionarMembro(){
-  const nome=document.getElementById('m-nome').value.trim();
-  const cargo=document.getElementById('m-cargo').value.trim();
   const email=document.getElementById('m-email').value.trim();
-  const senha=document.getElementById('m-pass').value;
   const role=document.getElementById('m-role').value;
   const msg=document.getElementById('m-msg');
   const predio_ids=[...document.querySelectorAll('#m-predios-list input:checked')].map(el=>parseInt(el.value));
-  if(!nome||!email||!senha){msg.className='msg-error';msg.textContent='Preencha nome, e-mail e senha.';return;}
-  msg.textContent='Criando...';msg.className='';
+  if(!email){msg.className='msg-error';msg.textContent='Informe o e-mail.';return;}
+  msg.textContent='Enviando convite...';msg.className='';
   try{
-    await POST('/api/usuarios',{nome,email,senha,cargo,role,predio_ids});
+    await POST('/api/usuarios',{email,role,predio_ids});
     await loadMembros(); renderTeam();
-    msg.className='msg-ok';msg.textContent=`✓ ${nome} adicionado!`;
-    setTimeout(()=>closeOverlayById('overlay-member'),1600);
+    msg.className='msg-ok';msg.textContent='✓ Convite enviado! A pessoa receberá um e-mail.';
+    setTimeout(()=>closeOverlayById('overlay-member'),2000);
   }catch(e){msg.className='msg-error';msg.textContent=e.message;}
 }
 async function removerMembro(id){
@@ -1137,17 +1133,29 @@ async function removerMembro(id){
   try{ await DEL(`/api/usuarios/${id}`); await loadMembros(); renderTeam(); showToast('Membro removido'); }
   catch(e){showToast('Erro: '+e.message);}
 }
+
+async function reenviarConvite(id){
+  try{
+    const r = await POST(`/api/usuarios/${id}/reenviar`);
+    showToast('✅ Convite reenviado!');
+  }catch(e){showToast('Erro: '+e.message);}
+}
 function renderTeam(){
   const el=document.getElementById('team-list');
   if(!membersList.length){el.innerHTML=emptyState('Nenhum membro neste prédio.');return;}
   el.innerHTML=membersList.map(m=>`
     <div class="member-card">
-      <div>
-        <div class="member-name">${m.nome}</div>
-        <div class="member-meta">${m.cargo||'—'} · ${m.role}</div>
-        <div style="font-size:12px;color:var(--text3);">${m.email}</div>
+      <div style="flex:1;min-width:0;">
+        <div class="member-name">${m.nome&&m.nome!==m.email?m.nome:''}</div>
+        <div style="font-size:13px;color:var(--text2);">${m.email}</div>
+        <div class="member-meta" style="margin-top:2px;">${m.cargo&&m.cargo!=='—'?m.cargo+' · ':''}${m.role}</div>
       </div>
-      ${m.id!==currentUser.id?`<button class="btn btn-ghost btn-sm btn-danger" onclick="removerMembro(${m.id})">Remover</button>`:''}
+      <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+        ${m.id!==currentUser.id?`
+          <button class="btn btn-ghost btn-sm" onclick="reenviarConvite(${m.id})" title="Reenviar convite por e-mail">📧 Reenviar</button>
+          <button class="btn btn-ghost btn-sm btn-danger" onclick="removerMembro(${m.id})">Remover</button>
+        `:'<span style="font-size:12px;color:var(--text3);">você</span>'}
+      </div>
     </div>`).join('');
 }
 
