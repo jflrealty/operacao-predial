@@ -222,6 +222,25 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .upload-area svg{width:28px;height:28px;stroke:var(--text3);margin-bottom:6px;}
 .upload-area p{font-size:13px;color:var(--text2);margin:0;}
 
+/* ── BUSCA ── */
+.search-bar{display:flex;gap:8px;margin-bottom:14px;align-items:center;}
+.search-input{flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius);font-size:15px;font-family:var(--font);background:var(--surface);color:var(--text);outline:none;}
+.search-input:focus{border-color:var(--border2);}
+.filter-toggle{padding:10px 14px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface);font-family:var(--font);font-size:13px;color:var(--text2);cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px;}
+.filter-toggle:hover{border-color:var(--border2);color:var(--text);}
+.filter-toggle.active{background:var(--surface2);border-color:var(--border2);color:var(--text);}
+.filter-panel{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;margin-bottom:14px;display:none;}
+.filter-panel.open{display:block;}
+.filter-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+@media(min-width:640px){.filter-grid{grid-template-columns:repeat(3,1fr);}}
+
+/* ── CHANGE PASSWORD ── */
+.change-pass-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:500;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(4px);}
+.change-pass-overlay.open{display:flex;}
+.change-pass-card{background:var(--surface);border-radius:var(--radius-lg);padding:32px;max-width:400px;width:100%;}
+.change-pass-title{font-size:20px;font-weight:600;margin-bottom:6px;}
+.change-pass-sub{font-size:14px;color:var(--text2);margin-bottom:24px;line-height:1.5;}
+
 .toast{position:fixed;bottom:calc(86px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%) translateY(16px);background:var(--accent);color:var(--accent-fg);padding:10px 22px;border-radius:99px;font-size:13px;font-weight:500;z-index:999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.15);}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 @media(min-width:768px){.toast{bottom:32px;}}
@@ -567,6 +586,28 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
   </div>
 </div>
 
+<!-- OVERLAY: TROCAR SENHA (primeiro login) -->
+<div class="change-pass-overlay" id="overlay-change-pass">
+  <div class="change-pass-card">
+    <div class="change-pass-title">🔐 Defina sua senha</div>
+    <div class="change-pass-sub" id="change-pass-sub">Por segurança, você precisa criar uma nova senha antes de continuar.</div>
+    <div class="field" id="change-pass-atual-field" style="display:none;">
+      <label>Senha atual</label>
+      <input type="password" id="cp-atual" placeholder="••••••••">
+    </div>
+    <div class="field">
+      <label>Nova senha</label>
+      <input type="password" id="cp-nova" placeholder="mínimo 6 caracteres">
+    </div>
+    <div class="field">
+      <label>Confirmar nova senha</label>
+      <input type="password" id="cp-confirma" placeholder="repita a senha">
+    </div>
+    <button class="btn btn-primary" onclick="trocarSenha()">Salvar e continuar</button>
+    <div id="cp-msg" style="margin-top:10px;font-size:13px;text-align:center;"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -688,6 +729,11 @@ function selecionarPredio(id, nomeEnc, slug) {
 }
 
 async function entrarNoApp() {
+  // Verifica se precisa trocar senha
+  if (currentUser.must_change_password) {
+    showPage('app'); // mostra o app por baixo
+    setTimeout(() => mostrarTrocaSenha(true), 300);
+  }
   showPage('app');
   document.getElementById('predio-nome-ativo').textContent = predioAtivo.nome;
   document.getElementById('app-user-label').textContent =
@@ -813,10 +859,19 @@ function renderDashboard() {
 // TICKETS
 // ════════════════════════════════════════════════
 function renderList() {
-  const f = filterAtual==='todos' ? allTickets :
-            filterAtual==='hoje'  ? allTickets.filter(t=>t.prazo&&t.prazo.split('T')[0]===hoje&&t.status!=='resolvido') :
-            allTickets.filter(t=>t.status===filterAtual);
-  document.getElementById('ticket-list').innerHTML = f.length ? f.map(ticketCard).join('') : emptyState('Nenhum ticket encontrado.');
+  // Se há filtros ativos, usa a busca server-side
+  const q = document.getElementById('search-input')?.value.trim();
+  const hasFilters = q || 
+    document.getElementById('f-status')?.value ||
+    document.getElementById('f-prio')?.value ||
+    document.getElementById('f-cat')?.value ||
+    document.getElementById('f-resp')?.value ||
+    document.getElementById('f-de')?.value ||
+    document.getElementById('f-ate')?.value;
+  
+  if (hasFilters) { buscarTickets(); return; }
+  
+  document.getElementById('ticket-list').innerHTML = allTickets.length ? allTickets.map(ticketCard).join('') : emptyState('Nenhum ticket encontrado.');
 }
 function setFilter(f, el) {
   filterAtual=f;
@@ -1159,6 +1214,101 @@ async function deletarFoto(fotoId, ticketId) {
     await carregarFotos(ticketId);
     showToast('Foto removida');
   } catch(e) { showToast('Erro: '+e.message); }
+}
+
+// ════════════════════════════════════════════════
+// BUSCA E FILTROS
+// ════════════════════════════════════════════════
+let searchTimer = null;
+
+function toggleFilterPanel() {
+  const panel = document.getElementById('filter-panel');
+  const btn   = document.getElementById('filter-toggle-btn');
+  panel.classList.toggle('open');
+  btn.classList.toggle('active');
+  // Popula select de responsável nos filtros
+  const respEl = document.getElementById('f-resp');
+  if (respEl && membersList.length) {
+    respEl.innerHTML = '<option value="">Todos</option>' +
+      membersList.map(m => `<option value="${m.id}">${m.nome}</option>`).join('');
+  }
+}
+
+function limparFiltros() {
+  ['f-status','f-prio','f-cat','f-resp','f-de','f-ate'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const s = document.getElementById('search-input');
+  if (s) s.value = '';
+  buscarTickets();
+}
+
+async function buscarTickets() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(async () => {
+    const q    = document.getElementById('search-input')?.value.trim() || '';
+    const status = document.getElementById('f-status')?.value || '';
+    const prio   = document.getElementById('f-prio')?.value || '';
+    const cat    = document.getElementById('f-cat')?.value || '';
+    const resp   = document.getElementById('f-resp')?.value || '';
+    const de     = document.getElementById('f-de')?.value || '';
+    const ate    = document.getElementById('f-ate')?.value || '';
+
+    const params = new URLSearchParams();
+    if (q)      params.set('q', q);
+    if (status) params.set('status', status);
+    if (prio)   params.set('prioridade', prio);
+    if (cat)    params.set('categoria', cat);
+    if (resp)   params.set('responsavel_id', resp);
+    if (de)     params.set('de', de);
+    if (ate)    params.set('ate', ate);
+
+    document.getElementById('ticket-list').innerHTML = '<div class="loader">Buscando...</div>';
+    try {
+      const url = params.toString() ? `/api/tickets?${params}` : '/api/tickets';
+      const results = await GET(url);
+      document.getElementById('ticket-list').innerHTML = results.length
+        ? results.map(ticketCard).join('')
+        : emptyState('Nenhum ticket encontrado com esses filtros.');
+    } catch(e) {
+      document.getElementById('ticket-list').innerHTML = emptyState('Erro na busca.');
+    }
+  }, 300); // debounce 300ms
+}
+
+// ════════════════════════════════════════════════
+// TROCAR SENHA
+// ════════════════════════════════════════════════
+function mostrarTrocaSenha(isPrimeiroLogin = false) {
+  document.getElementById('change-pass-sub').textContent = isPrimeiroLogin
+    ? 'Por segurança, você precisa criar uma nova senha antes de continuar.'
+    : 'Defina uma nova senha para sua conta.';
+  document.getElementById('change-pass-atual-field').style.display = isPrimeiroLogin ? 'none' : 'block';
+  document.getElementById('cp-nova').value = '';
+  document.getElementById('cp-confirma').value = '';
+  document.getElementById('cp-msg').textContent = '';
+  document.getElementById('overlay-change-pass').classList.add('open');
+}
+
+async function trocarSenha() {
+  const atual    = document.getElementById('cp-atual')?.value || '';
+  const nova     = document.getElementById('cp-nova').value;
+  const confirma = document.getElementById('cp-confirma').value;
+  const msg      = document.getElementById('cp-msg');
+
+  if (!nova || nova.length < 6) { msg.className='msg-error'; msg.textContent='Mínimo 6 caracteres.'; return; }
+  if (nova !== confirma) { msg.className='msg-error'; msg.textContent='As senhas não coincidem.'; return; }
+
+  msg.textContent = 'Salvando...'; msg.className = '';
+  try {
+    await POST('/api/auth/change-password', { senha_atual: atual, senha_nova: nova });
+    msg.className = 'msg-ok'; msg.textContent = '✓ Senha alterada!';
+    setTimeout(() => {
+      document.getElementById('overlay-change-pass').classList.remove('open');
+      showToast('Senha atualizada com sucesso!');
+    }, 1200);
+  } catch(e) { msg.className='msg-error'; msg.textContent=e.message; }
 }
 
 // ════════════════════════════════════════════════
