@@ -360,12 +360,55 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 
       <!-- TICKETS -->
       <div class="screen" id="screen-tickets">
-        <div class="filter-row">
-          <button class="chip active" onclick="setFilter('todos',this)">Todos</button>
-          <button class="chip" onclick="setFilter('aberto',this)">Aberto</button>
-          <button class="chip" onclick="setFilter('em andamento',this)">Em andamento</button>
-          <button class="chip" onclick="setFilter('resolvido',this)">Resolvido</button>
-          <button class="chip" onclick="setFilter('feedback ao cliente',this)">Feedback</button>
+        <div class="search-bar">
+          <input type="search" class="search-input" id="search-input" placeholder="Buscar por título, descrição, local..." oninput="buscarTickets()">
+          <button class="filter-toggle" id="filter-toggle-btn" onclick="toggleFilterPanel()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+            Filtros
+          </button>
+        </div>
+        <div class="filter-panel" id="filter-panel">
+          <div class="filter-grid">
+            <div class="field" style="margin:0;"><label>Status</label>
+              <select id="f-status" onchange="buscarTickets()">
+                <option value="">Todos</option>
+                <option value="aberto">Aberto</option>
+                <option value="em andamento">Em andamento</option>
+                <option value="resolvido">Resolvido</option>
+                <option value="feedback ao cliente">Feedback</option>
+              </select>
+            </div>
+            <div class="field" style="margin:0;"><label>Prioridade</label>
+              <select id="f-prio" onchange="buscarTickets()">
+                <option value="">Todas</option>
+                <option value="Alta">Alta</option>
+                <option value="Média">Média</option>
+                <option value="Baixa">Baixa</option>
+              </select>
+            </div>
+            <div class="field" style="margin:0;"><label>Categoria</label>
+              <select id="f-cat" onchange="buscarTickets()">
+                <option value="">Todas</option>
+                <option>Manutenção</option><option>Limpeza / Governança</option>
+                <option>Portaria / Acesso</option><option>Internet / TV</option>
+                <option>Climatização / AC</option><option>Hidráulica</option>
+                <option>Elétrica</option><option>Solicitação de serviço</option>
+                <option>Reclamação</option><option>Outro</option>
+              </select>
+            </div>
+            <div class="field" style="margin:0;"><label>Responsável</label>
+              <select id="f-resp" onchange="buscarTickets()">
+                <option value="">Todos</option>
+              </select>
+            </div>
+            <div class="field" style="margin:0;"><label>De</label>
+              <input type="date" id="f-de" onchange="buscarTickets()">
+            </div>
+            <div class="field" style="margin:0;"><label>Até</label>
+              <input type="date" id="f-ate" onchange="buscarTickets()">
+            </div>
+          </div>
+          <button class="btn btn-ghost btn-sm" style="margin-top:10px;" onclick="limparFiltros()">Limpar filtros</button>
         </div>
         <div id="ticket-list"><div class="loader">Carregando...</div></div>
       </div>
