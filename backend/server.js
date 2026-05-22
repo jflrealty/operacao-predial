@@ -360,7 +360,7 @@ app.get('/api/usuarios', auth, async (req, res) => {
     if (pid) {
       if (isAdmin) {
         ({ rows } = await pool.query(
-          `SELECT u.id,u.nome,u.email,u.cargo,u.role,u.ativo FROM usuarios u JOIN usuario_predios up ON up.usuario_id=u.id WHERE up.predio_id=$1 ORDER BY u.nome`,
+          `SELECT u.id,u.nome,u.email,u.cargo,u.role,u.ativo FROM usuarios u JOIN usuario_predios up ON up.usuario_id=u.id WHERE up.predio_id=$1 AND u.ativo=TRUE ORDER BY u.nome`,
           [pid]
         ));
       } else {
