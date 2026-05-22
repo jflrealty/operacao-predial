@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="JFL Op">
+<meta name="theme-color" content="#1A1917">
+<link rel="manifest" href="/manifest.json">
 <title>Operação JFL Inc</title>
-<!-- BUILD v2.1 FOTOS -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -319,6 +321,14 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         Prédios
       </button>
       <div class="nav-section">Conta</div>
+      <button class="nav-item" onclick="showScreen('perfil',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        Meu perfil
+      </button>
+      <button class="nav-item admin-only" style="display:none;" onclick="showScreen('config',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        Configurações
+      </button>
       <button class="nav-item" onclick="showPredioSelector()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 16l4-4m0 0l-4-4m4 4H7"/><path d="M7 4H5a2 2 0 00-2 2v12a2 2 0 002 2h2"/></svg>
         Trocar prédio
@@ -485,6 +495,37 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         </div>
       </div>
 
+      <!-- PERFIL -->
+      <div class="screen" id="screen-perfil">
+        <div class="section-title" style="margin-top:0;">Meu perfil</div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:16px;">
+          <div class="field"><label>Nome</label><input type="text" id="perfil-nome" placeholder="Seu nome completo"></div>
+          <div class="field" style="margin-bottom:0;"><label>Cargo / Setor</label><input type="text" id="perfil-cargo" placeholder="Ex: Manutenção"></div>
+        </div>
+        <button class="btn btn-primary" onclick="salvarPerfil()" style="margin-bottom:16px;">Salvar perfil</button>
+        <div id="perfil-msg" style="font-size:13px;text-align:center;margin-bottom:20px;"></div>
+        <div class="divider"></div>
+        <div class="section-title">Trocar senha</div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;">
+          <div class="field"><label>Senha atual</label><input type="password" id="perfil-senha-atual" placeholder="••••••••"></div>
+          <div class="field"><label>Nova senha</label><input type="password" id="perfil-senha-nova" placeholder="mínimo 6 caracteres"></div>
+          <div class="field" style="margin-bottom:0;"><label>Confirmar nova senha</label><input type="password" id="perfil-senha-conf" placeholder="repita a senha"></div>
+        </div>
+        <button class="btn btn-primary" onclick="salvarSenha()" style="margin-top:12px;">Alterar senha</button>
+        <div id="perfil-senha-msg" style="font-size:13px;text-align:center;margin-top:10px;"></div>
+      </div>
+
+      <!-- CONFIGURAÇÕES (SLA) -->
+      <div class="screen" id="screen-config">
+        <div class="section-title" style="margin-top:0;">SLA por categoria</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">
+          Define o prazo padrão (em horas) para cada categoria de ticket. Ao abrir um ticket, o prazo é preenchido automaticamente.
+        </div>
+        <div id="sla-list"><div class="loader">Carregando...</div></div>
+        <button class="btn btn-primary" onclick="salvarSLA()" style="margin-top:16px;">Salvar configurações</button>
+        <div id="sla-msg" style="font-size:13px;text-align:center;margin-top:10px;"></div>
+      </div>
+
       <!-- PRÉDIOS (superadmin) -->
       <div class="screen" id="screen-predios">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
@@ -546,7 +587,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         </select>
       </div>
       <div class="field"><label>Categoria</label>
-        <select id="n-cat">
+        <select id="n-cat" onchange="sugerirPrazoSLA(this.value)">
           <option value="">Selecionar...</option>
           <option>Manutenção</option><option>Limpeza / Governança</option>
           <option>Portaria / Acesso</option><option>Internet / TV</option>
@@ -1363,6 +1404,135 @@ async function trocarSenha() {
 }
 
 // ════════════════════════════════════════════════
+// PWA — Service Worker
+// ════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(() => console.log('✅ SW registrado'))
+      .catch(e => console.log('SW erro:', e));
+  });
+}
+
+// ════════════════════════════════════════════════
+// PERFIL DO USUÁRIO
+// ════════════════════════════════════════════════
+function carregarPerfil() {
+  document.getElementById('perfil-nome').value = currentUser.nome || '';
+  document.getElementById('perfil-cargo').value = currentUser.cargo || '';
+  document.getElementById('perfil-msg').textContent = '';
+  document.getElementById('perfil-senha-msg').textContent = '';
+  ['perfil-senha-atual','perfil-senha-nova','perfil-senha-conf'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+}
+
+async function salvarPerfil() {
+  const nome  = document.getElementById('perfil-nome').value.trim();
+  const cargo = document.getElementById('perfil-cargo').value.trim();
+  const msg   = document.getElementById('perfil-msg');
+  if (!nome) { msg.className='msg-error'; msg.textContent='Nome obrigatório.'; return; }
+  msg.textContent='Salvando...'; msg.className='';
+  try {
+    const u = await api('PATCH', '/api/auth/perfil', { nome, cargo });
+    currentUser.nome  = u.nome;
+    currentUser.cargo = u.cargo;
+    document.getElementById('app-user-label').textContent = `${u.nome}${u.cargo?' · '+u.cargo:''}`;
+    msg.className='msg-ok'; msg.textContent='✓ Perfil atualizado!';
+    setTimeout(() => msg.textContent='', 3000);
+  } catch(e) { msg.className='msg-error'; msg.textContent=e.message; }
+}
+
+async function salvarSenha() {
+  const atual   = document.getElementById('perfil-senha-atual').value;
+  const nova    = document.getElementById('perfil-senha-nova').value;
+  const conf    = document.getElementById('perfil-senha-conf').value;
+  const msg     = document.getElementById('perfil-senha-msg');
+  if (!atual) { msg.className='msg-error'; msg.textContent='Informe a senha atual.'; return; }
+  if (!nova || nova.length < 6) { msg.className='msg-error'; msg.textContent='Nova senha: mínimo 6 caracteres.'; return; }
+  if (nova !== conf) { msg.className='msg-error'; msg.textContent='As senhas não coincidem.'; return; }
+  msg.textContent='Alterando...'; msg.className='';
+  try {
+    await POST('/api/auth/change-password', { senha_atual: atual, senha_nova: nova });
+    msg.className='msg-ok'; msg.textContent='✓ Senha alterada!';
+    ['perfil-senha-atual','perfil-senha-nova','perfil-senha-conf'].forEach(id => document.getElementById(id).value='');
+    setTimeout(() => msg.textContent='', 3000);
+  } catch(e) { msg.className='msg-error'; msg.textContent=e.message; }
+}
+
+// ════════════════════════════════════════════════
+// SLA CONFIG
+// ════════════════════════════════════════════════
+const CATEGORIAS = [
+  'Manutenção','Limpeza / Governança','Portaria / Acesso','Internet / TV',
+  'Climatização / AC','Hidráulica','Elétrica','Solicitação de serviço','Reclamação','Outro'
+];
+
+let slaConfig = {}; // { categoria: prazo_horas }
+
+async function carregarSLA() {
+  try {
+    const rows = await GET('/api/sla');
+    slaConfig = {};
+    rows.forEach(r => slaConfig[r.categoria] = r.prazo_horas);
+    renderSLA();
+  } catch(e) { console.error('SLA:', e.message); }
+}
+
+function renderSLA() {
+  const el = document.getElementById('sla-list');
+  if (!el) return;
+  el.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;">
+      ${CATEGORIAS.map(cat => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);gap:12px;">
+          <div style="font-size:14px;flex:1;">${cat}</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+            <input type="number" id="sla-${cat.replace(/[^a-z]/gi,'_')}"
+              value="${slaConfig[cat] || ''}"
+              placeholder="—"
+              min="1" max="720"
+              style="width:72px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:var(--font);text-align:center;">
+            <span style="font-size:12px;color:var(--text2);">h</span>
+          </div>
+        </div>`).join('')}
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-top:8px;">Deixe em branco para não sugerir prazo automaticamente.</div>`;
+}
+
+async function salvarSLA() {
+  const msg = document.getElementById('sla-msg');
+  const configs = CATEGORIAS.map(cat => ({
+    categoria: cat,
+    prazo_horas: parseInt(document.getElementById('sla-'+cat.replace(/[^a-z]/gi,'_'))?.value) || null
+  })).filter(c => c.prazo_horas && c.prazo_horas > 0);
+
+  msg.textContent='Salvando...'; msg.className='';
+  try {
+    await api('PUT', '/api/sla', { configs });
+    await carregarSLA();
+    msg.className='msg-ok'; msg.textContent='✓ SLA salvo!';
+    setTimeout(() => msg.textContent='', 3000);
+    showToast('Configurações de SLA salvas');
+  } catch(e) { msg.className='msg-error'; msg.textContent=e.message; }
+}
+
+// Sugere prazo ao selecionar categoria no form de novo ticket
+async function sugerirPrazoSLA(categoria) {
+  if (!categoria || !predioAtivo) return;
+  try {
+    const r = await GET(`/api/sla/${encodeURIComponent(categoria)}`);
+    if (r.prazo_data) {
+      const prazoEl = document.getElementById('n-prazo');
+      if (prazoEl && !prazoEl.value) {
+        prazoEl.value = r.prazo_data;
+        showToast(`Prazo sugerido: ${r.prazo_horas}h (SLA)`);
+      }
+    }
+  } catch(e) { /* silencioso */ }
+}
+
+// ════════════════════════════════════════════════
 // PRÉDIOS (superadmin)
 // ════════════════════════════════════════════════
 function openAddPredio(){
@@ -1473,6 +1643,8 @@ function showScreen(name,el){
   if(name==='team')       renderTeam();
   if(name==='predios')    renderPrediosList();
   if(name==='relatorios') { /* static screen */ }
+  if(name==='perfil')     carregarPerfil();
+  if(name==='config')     { carregarSLA(); }
 }
 function showPage(name){
   document.getElementById('page-login').classList.remove('active');
