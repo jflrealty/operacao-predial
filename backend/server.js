@@ -720,6 +720,19 @@ app.get('/api/relatorios/pdf', auth, comPredio, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
+// UNIDADES
+// ══════════════════════════════════════════════════════════════
+
+// GET /api/unidades — lista unidades do prédio ativo
+app.get('/api/unidades', auth, comPredio, async (req, res) => {
+  const { rows } = await pool.query(
+    'SELECT id, sap, numero, andar, label FROM unidades WHERE predio_id=$1 AND ativo=TRUE ORDER BY sap',
+    [req.predio_id]
+  );
+  res.json(rows);
+});
+
+// ══════════════════════════════════════════════════════════════
 // SLA CONFIG
 // ══════════════════════════════════════════════════════════════
 
@@ -888,6 +901,15 @@ async function migrate() {
         nome_original TEXT NOT NULL, nome_arquivo TEXT NOT NULL UNIQUE,
         tamanho INTEGER, mime_type TEXT, enviado_por TEXT, criado_em TIMESTAMPTZ DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS unidades (
+        id        SERIAL PRIMARY KEY,
+        predio_id INTEGER NOT NULL REFERENCES predios(id) ON DELETE CASCADE,
+        sap       TEXT NOT NULL UNIQUE,
+        numero    TEXT NOT NULL,
+        andar     TEXT,
+        label     TEXT NOT NULL,
+        ativo     BOOLEAN DEFAULT TRUE
+      );
       CREATE TABLE IF NOT EXISTS sla_config (
         id SERIAL PRIMARY KEY,
         predio_id INTEGER NOT NULL REFERENCES predios(id) ON DELETE CASCADE,
@@ -905,6 +927,8 @@ async function migrate() {
       CREATE INDEX IF NOT EXISTS idx_historico_ticket      ON ticket_historico(ticket_id);
       CREATE INDEX IF NOT EXISTS idx_atividades_ticket     ON ticket_atividades(ticket_id);
       CREATE INDEX IF NOT EXISTS idx_fotos_ticket          ON ticket_fotos(ticket_id);
+    CREATE INDEX IF NOT EXISTS idx_unidades_predio       ON unidades(predio_id);
+    CREATE INDEX IF NOT EXISTS idx_unidades_sap          ON unidades(sap);
       CREATE INDEX IF NOT EXISTS idx_usuario_predios_uid   ON usuario_predios(usuario_id);
       CREATE INDEX IF NOT EXISTS idx_usuario_predios_pid   ON usuario_predios(predio_id);
     `);
