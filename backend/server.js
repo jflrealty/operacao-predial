@@ -511,7 +511,7 @@ app.post('/api/tickets', auth, comPredio, async (req, res) => {
 
 app.patch('/api/tickets/:id/status', auth, comPredio, async (req, res) => {
   const { status } = req.body;
-  const validos = ['aberto','em andamento','feedback ao cliente','resolvido'];
+  const validos = ['aberto','em andamento','feedback ao cliente','resolvido','cancelado'];
   if (!validos.includes(status)) return res.status(400).json({ erro: 'Status inválido' });
   const { rows } = await pool.query(
     'UPDATE tickets SET status=$1,atualizado_em=NOW() WHERE id=$2 AND predio_id=$3 RETURNING *',
@@ -881,7 +881,7 @@ async function migrate() {
         id SERIAL PRIMARY KEY, predio_id INTEGER NOT NULL REFERENCES predios(id) ON DELETE CASCADE,
         titulo TEXT NOT NULL, descricao TEXT, categoria TEXT, local TEXT, origem TEXT,
         prioridade TEXT NOT NULL DEFAULT 'Média' CHECK (prioridade IN ('Baixa','Média','Alta')),
-        status TEXT NOT NULL DEFAULT 'aberto' CHECK (status IN ('aberto','em andamento','feedback ao cliente','resolvido')),
+        status TEXT NOT NULL DEFAULT 'aberto' CHECK (status IN ('aberto','em andamento','feedback ao cliente','resolvido','cancelado')),
         autor_id INTEGER REFERENCES usuarios(id), autor_nome TEXT,
         responsavel_id INTEGER REFERENCES usuarios(id), responsavel_nome TEXT,
         prazo DATE, criado_em TIMESTAMPTZ DEFAULT NOW(), atualizado_em TIMESTAMPTZ DEFAULT NOW()
