@@ -665,6 +665,125 @@ app.get('/api/stats', auth, comPredio, async (req, res) => {
 app.get('*', (_, res) => res.sendFile(path.join(__dirname, 'public/index.html')));
 
 // ══════════════════════════════════════════════════════════════
+// JOB: NOTIFICAÇÃO DE PRAZO VENCENDO
+// Roda todo dia às 8h — avisa responsáveis com tickets vencendo em 24h
+// ══════════════════════════════════════════════════════════════
+
+function emailPrazoVencendo(ticket, predioNome, responsavelEmail) {
+  const prazoFmt = new Date(ticket.prazo).toLocaleDateString('pt-BR');
+  return {
+    to: responsavelEmail,
+    subject: `[JFL] ⏰ Ticket #${ticket.id} vence amanhã — ${ticket.titulo}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:#92590A;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0;">
+          <h2 style="margin:0;font-size:18px;">⏰ Prazo vencendo amanhã</h2>
+        </div>
+        <div style="background:#fdf5e6;padding:24px;border:1px solid #e8d0a8;border-top:none;border-radius:0 0 8px 8px;">
+          <p style="margin:0 0 16px;font-size:15px;color:#1a1917;">
+            O ticket abaixo vence <strong>amanhã (${prazoFmt})</strong> e ainda não foi resolvido.
+          </p>
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:8px 0;color:#6b6860;width:120px;">Ticket</td><td style="padding:8px 0;font-weight:600;">#${ticket.id}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Título</td><td style="padding:8px 0;">${ticket.titulo}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Prédio</td><td style="padding:8px 0;">${predioNome}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Prioridade</td><td style="padding:8px 0;">${ticket.prioridade}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Prazo</td><td style="padding:8px 0;color:#92590A;font-weight:600;">${prazoFmt}</td></tr>
+          </table>
+        </div>
+      </div>`,
+  };
+}
+
+function emailPrazoAtrasado(ticket, predioNome, responsavelEmail) {
+  const prazoFmt = new Date(ticket.prazo).toLocaleDateString('pt-BR');
+  return {
+    to: responsavelEmail,
+    subject: `[JFL] 🔴 Ticket #${ticket.id} ATRASADO — ${ticket.titulo}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:#C0392B;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0;">
+          <h2 style="margin:0;font-size:18px;">🔴 Ticket em atraso</h2>
+        </div>
+        <div style="background:#fdf0ee;padding:24px;border:1px solid #f0c8c4;border-top:none;border-radius:0 0 8px 8px;">
+          <p style="margin:0 0 16px;font-size:15px;color:#1a1917;">
+            O ticket abaixo está <strong>atrasado desde ${prazoFmt}</strong> e ainda não foi resolvido.
+          </p>
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:8px 0;color:#6b6860;width:120px;">Ticket</td><td style="padding:8px 0;font-weight:600;">#${ticket.id}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Título</td><td style="padding:8px 0;">${ticket.titulo}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Prédio</td><td style="padding:8px 0;">${predioNome}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Prioridade</td><td style="padding:8px 0;">${ticket.prioridade}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Prazo era</td><td style="padding:8px 0;color:#C0392B;font-weight:600;">${prazoFmt}</td></tr>
+          </table>
+        </div>
+      </div>`,
+  };
+}
+
+async function jobNotificacoesPrazo() {
+  if (!process.env.SMTP_USER) return; // SMTP não configurado, pula
+  const hoje = new Date().toISOString().split('T')[0];
+  const amanha = new Date(Date.now() + 24*60*60*1000).toISOString().split('T')[0];
+
+  try {
+    // Tickets vencendo amanhã (com responsável)
+    const { rows: vencAmanha } = await pool.query(`
+      SELECT t.*, p.nome as predio_nome, u.email as resp_email
+      FROM tickets t
+      JOIN predios p ON p.id = t.predio_id
+      LEFT JOIN usuarios u ON u.id = t.responsavel_id
+      WHERE t.prazo::date = $1
+        AND t.status NOT IN ('resolvido')
+        AND t.responsavel_id IS NOT NULL
+    `, [amanha]);
+
+    for (const t of vencAmanha) {
+      if (t.resp_email) {
+        await enviarEmail(emailPrazoVencendo(t, t.predio_nome, t.resp_email));
+        console.log(`[JOB] Prazo vencendo amanhã: ticket #${t.id} → ${t.resp_email}`);
+      }
+    }
+
+    // Tickets atrasados (prazo passou, ainda não resolvido)
+    const { rows: atrasados } = await pool.query(`
+      SELECT t.*, p.nome as predio_nome, u.email as resp_email
+      FROM tickets t
+      JOIN predios p ON p.id = t.predio_id
+      LEFT JOIN usuarios u ON u.id = t.responsavel_id
+      WHERE t.prazo::date = $1
+        AND t.status NOT IN ('resolvido')
+        AND t.responsavel_id IS NOT NULL
+    `, [hoje]);
+
+    for (const t of atrasados) {
+      if (t.resp_email) {
+        await enviarEmail(emailPrazoAtrasado(t, t.predio_nome, t.resp_email));
+        console.log(`[JOB] Ticket atrasado: #${t.id} → ${t.resp_email}`);
+      }
+    }
+
+    console.log(`[JOB] Notificações de prazo: ${vencAmanha.length} vencendo amanhã, ${atrasados.length} atrasados`);
+  } catch(e) {
+    console.error('[JOB] Erro nas notificações de prazo:', e.message);
+  }
+}
+
+// Agenda o job para rodar todo dia às 8h (horário UTC = 5h Brasília)
+function agendarJobPrazo() {
+  const agora = new Date();
+  const proximas8h = new Date();
+  proximas8h.setUTCHours(11, 0, 0, 0); // 11h UTC = 8h Brasília
+  if (proximas8h <= agora) proximas8h.setDate(proximas8h.getDate() + 1);
+  const msAte8h = proximas8h - agora;
+  console.log(`[JOB] Próxima notificação de prazo em ${Math.round(msAte8h/1000/60)} minutos`);
+  setTimeout(() => {
+    jobNotificacoesPrazo();
+    setInterval(jobNotificacoesPrazo, 24 * 60 * 60 * 1000); // repete a cada 24h
+  }, msAte8h);
+}
+
+// ══════════════════════════════════════════════════════════════
 // AUTO-MIGRATE
 // ══════════════════════════════════════════════════════════════
 async function migrate() {
@@ -739,5 +858,8 @@ async function migrate() {
 }
 
 migrate()
-  .then(() => app.listen(PORT, () => console.log(`🚀 Porta ${PORT}`)))
+  .then(() => {
+    app.listen(PORT, () => console.log(`🚀 Porta ${PORT}`));
+    agendarJobPrazo();
+  })
   .catch(e => { console.error('Falha fatal:', e.message); process.exit(1); });
