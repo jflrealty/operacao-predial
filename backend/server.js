@@ -1,1443 +1,812 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<title>Operação JFL Inc</title>
-<!-- BUILD v2.1 FOTOS -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-:root {
-  --bg:#F7F6F2; --surface:#FFFFFF; --surface2:#F0EEE8;
-  --border:#E2DED6; --border2:#C8C4BC;
-  --text:#1A1917; --text2:#6B6860; --text3:#A09D98;
-  --accent:#1A1917; --accent-fg:#FFFFFF;
-  --red:#C0392B; --red-bg:#FDF0EE;
-  --amber:#92590A; --amber-bg:#FDF5E6;
-  --green:#1E6B3C; --green-bg:#EBF5EE;
-  --blue:#1A4F8A; --blue-bg:#EBF0F9;
-  --purple:#6B21A8; --purple-bg:#F3EBFA;
-  --radius:10px; --radius-lg:14px;
-  --font:'DM Sans',sans-serif; --mono:'DM Mono',monospace;
-}
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-html{-webkit-text-size-adjust:100%;}
-body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+// ============================================================
+// OPERAÇÃO JFL Inc — Backend
+// Express + PostgreSQL + JWT | Nodemailer | PDFKit | ExcelJS | Multer
+// ============================================================
 
-/* ── FIELDS ── */
-.field{margin-bottom:14px;}
-.field label{display:block;font-size:11px;font-weight:600;color:var(--text2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.07em;}
-.field input,.field select,.field textarea{width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:16px;font-family:var(--font);background:var(--surface);color:var(--text);outline:none;transition:border-color .15s;appearance:none;-webkit-appearance:none;}
-.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--border2);}
-.field textarea{resize:vertical;min-height:80px;}
-.field input[readonly]{background:var(--surface2);color:var(--text2);}
+const express      = require('express');
+const { Pool }     = require('pg');
+const bcrypt       = require('bcryptjs');
+const jwt          = require('jsonwebtoken');
+const cors         = require('cors');
+const path         = require('path');
+const fs           = require('fs');
+const nodemailer   = require('nodemailer');
+const multer       = require('multer');
+const PDFDocument  = require('pdfkit');
+const ExcelJS      = require('exceljs');
 
-/* ── BUTTONS ── */
-.btn{padding:11px 20px;border-radius:var(--radius);font-size:14px;font-weight:500;font-family:var(--font);cursor:pointer;border:none;transition:opacity .15s,transform .1s;}
-.btn:active{transform:scale(.98);}
-.btn-primary{background:var(--accent);color:var(--accent-fg);width:100%;}
-.btn-primary:hover{opacity:.88;}
-.btn-ghost{background:none;border:1px solid var(--border);color:var(--text2);}
-.btn-ghost:hover{border-color:var(--border2);color:var(--text);}
-.btn-sm{padding:7px 14px;font-size:13px;}
-.btn-danger{background:var(--red-bg);color:var(--red);border:1px solid transparent;}
-.msg-error{font-size:13px;color:var(--red);margin-top:10px;text-align:center;}
-.msg-ok{font-size:13px;color:var(--green);margin-top:10px;text-align:center;}
+const app    = express();
+const PORT   = process.env.PORT || 3000;
+const SECRET = process.env.JWT_SECRET || 'dev-secret-troque-em-producao';
+const APP_URL = process.env.APP_URL || 'https://operacao-predial-production.up.railway.app';
 
-/* ── CENTER WRAPPER ── */
-.center-page{display:none;min-height:100vh;background:var(--bg);align-items:center;justify-content:center;padding:24px;}
-.center-page.active{display:flex;}
-.auth-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:40px 32px;max-width:400px;width:100%;}
-.auth-logo{font-size:22px;font-weight:600;margin-bottom:4px;letter-spacing:-.02em;}
-.auth-sub{font-size:14px;color:var(--text2);margin-bottom:32px;}
+// ── UPLOAD DIR ────────────────────────────────────────────────
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-/* ── SELEÇÃO DE PRÉDIO ── */
-.predio-grid{display:flex;flex-direction:column;gap:10px;margin-bottom:20px;}
-.predio-btn{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:16px 18px;border-radius:var(--radius-lg);
-  border:1.5px solid var(--border);background:var(--surface);
-  font-family:var(--font);font-size:15px;font-weight:500;
-  color:var(--text);cursor:pointer;transition:all .15s;text-align:left;
-}
-.predio-btn:hover{border-color:var(--border2);background:var(--surface2);}
-.predio-btn svg{width:18px;height:18px;stroke:var(--text3);stroke-width:1.5;flex-shrink:0;}
-.predio-slug{font-size:12px;font-family:var(--mono);color:var(--text3);margin-top:2px;}
-
-/* ── APP ── */
-#app{display:none;}
-.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:stretch;justify-content:space-between;position:sticky;top:0;z-index:50;height:56px;}
-.topbar-left{display:flex;align-items:center;gap:14px;}
-.topbar-brand{font-size:15px;font-weight:600;letter-spacing:-.01em;}
-.predio-switcher{
-  display:flex;align-items:center;gap:6px;padding:5px 10px;
-  border-radius:var(--radius);border:1px solid var(--border);
-  background:var(--surface2);font-size:13px;font-weight:500;
-  color:var(--text);cursor:pointer;font-family:var(--font);transition:all .12s;
-}
-.predio-switcher:hover{border-color:var(--border2);}
-.predio-switcher svg{width:14px;height:14px;stroke:var(--text2);stroke-width:2;}
-.topbar-right{display:flex;align-items:center;gap:8px;}
-.topbar-user{font-size:12px;color:var(--text2);}
-
-@media(min-width:768px){
-  .layout{display:flex;min-height:calc(100vh - 56px);}
-  .sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:20px 12px;position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto;}
-  .main-content{flex:1;padding:28px;max-width:920px;}
-  .bottom-tabs{display:none;}
-  .fab{display:none;}
-}
-@media(max-width:767px){
-  .sidebar{display:none;}
-  .main-content{padding:16px;padding-bottom:110px;}
-  .layout{display:block;}
-  .bottom-tabs{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);display:flex;z-index:50;padding-bottom:env(safe-area-inset-bottom,0px);}
-  .bottom-tab{flex:1;padding:10px 4px 8px;border:none;background:none;font-size:11px;font-family:var(--font);color:var(--text2);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .15s;}
-  .bottom-tab svg{width:22px;height:22px;stroke-width:1.5;}
-  .bottom-tab.active{color:var(--accent);}
-  .fab{position:fixed;bottom:calc(72px + env(safe-area-inset-bottom,0px));right:18px;width:54px;height:54px;border-radius:50%;background:var(--accent);color:var(--accent-fg);border:none;font-size:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,.25);z-index:49;-webkit-tap-highlight-color:transparent;}
-}
-
-.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius);font-size:14px;color:var(--text2);cursor:pointer;margin-bottom:2px;transition:background .12s,color .12s;border:none;background:none;font-family:var(--font);width:100%;text-align:left;}
-.nav-item:hover{background:var(--surface2);color:var(--text);}
-.nav-item.active{background:var(--surface2);color:var(--text);font-weight:500;}
-.nav-item svg{width:18px;height:18px;flex-shrink:0;stroke-width:1.75;}
-.nav-section{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;padding:16px 12px 6px;}
-
-.screen{display:none;}
-.screen.active{display:block;}
-
-/* ── STATS ── */
-.stats-row{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:28px;}
-@media(min-width:640px){.stats-row{grid-template-columns:repeat(4,1fr);}}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .1s;-webkit-tap-highlight-color:transparent;position:relative;}
-.stat-card:hover{border-color:var(--border2);box-shadow:0 2px 10px rgba(0,0,0,.07);transform:translateY(-1px);}
-.stat-card:active{transform:scale(.97);}
-.stat-arrow{position:absolute;top:10px;right:10px;width:14px;height:14px;opacity:0;transition:opacity .15s;}
-.stat-card:hover .stat-arrow{opacity:1;}
-.stat-label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;}
-.stat-value{font-size:32px;font-weight:600;line-height:1;letter-spacing:-.02em;}
-.stat-hint{font-size:12px;color:var(--text3);margin-top:4px;}
-.stat-red .stat-value{color:var(--red);}
-
-/* ── TICKET CARD ── */
-.ticket-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .1s;}
-.ticket-card:hover{border-color:var(--border2);box-shadow:0 2px 10px rgba(0,0,0,.06);transform:translateY(-1px);}
-.tc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;}
-.tc-title{font-size:14px;font-weight:500;line-height:1.4;flex:1;}
-.tc-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text2);}
-.tc-bottom{display:flex;align-items:center;justify-content:space-between;margin-top:10px;flex-wrap:wrap;gap:6px;}
-
-/* ── BADGES ── */
-.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:500;white-space:nowrap;}
-.badge-aberto{background:var(--blue-bg);color:var(--blue);}
-.badge-andamento{background:var(--amber-bg);color:var(--amber);}
-.badge-resolvido{background:var(--green-bg);color:var(--green);}
-.badge-feedback{background:var(--purple-bg);color:var(--purple);}
-.prio-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0;}
-.prio-Alta{background:var(--red);}
-.prio-Média{background:var(--amber);}
-.prio-Baixa{background:var(--green);}
-
-.section-title{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.07em;margin:24px 0 12px;}
-.section-title:first-child{margin-top:0;}
-.filter-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:16px;scrollbar-width:none;}
-.filter-row::-webkit-scrollbar{display:none;}
-.chip{padding:6px 16px;border-radius:99px;font-size:13px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;white-space:nowrap;flex-shrink:0;font-family:var(--font);transition:all .12s;}
-.chip:hover{border-color:var(--border2);color:var(--text);}
-.chip.active{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);}
-.empty{text-align:center;padding:52px 20px;color:var(--text2);font-size:14px;}
-.empty svg{width:36px;height:36px;stroke:var(--text3);margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;}
-.loader{text-align:center;padding:40px;color:var(--text2);font-size:14px;}
-
-/* ── OVERLAY / DRAWER ── */
-.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:flex-end;backdrop-filter:blur(2px);}
-@media(min-width:768px){.overlay{align-items:center;justify-content:center;}}
-.overlay.open{display:flex;}
-.drawer{background:var(--surface);width:100%;max-height:92vh;overflow-y:auto;border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding-bottom:32px;}
-@media(min-width:768px){.drawer{border-radius:var(--radius-lg);max-width:560px;max-height:88vh;}}
-.drawer-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:14px auto 20px;}
-@media(min-width:768px){.drawer-handle{display:none;}}
-.drawer-body{padding:0 22px;}
-.drawer-title{font-size:18px;font-weight:600;margin-bottom:20px;letter-spacing:-.01em;}
-
-/* ── DETAIL ── */
-.detail-id{font-family:var(--mono);font-size:12px;color:var(--text3);margin-bottom:4px;}
-.detail-title{font-size:18px;font-weight:600;line-height:1.4;letter-spacing:-.01em;}
-.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0;}
-.detail-field .dl{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;}
-.detail-field .dv{font-size:14px;font-weight:500;}
-.divider{height:1px;background:var(--border);margin:18px 0;}
-.status-pills{display:flex;gap:8px;flex-wrap:wrap;}
-.status-pill{padding:6px 14px;border-radius:99px;font-size:13px;border:1px solid var(--border);background:none;font-family:var(--font);cursor:pointer;transition:all .15s;color:var(--text2);}
-.status-pill:hover{border-color:var(--border2);}
-.status-pill.sel-aberto{background:var(--blue-bg);color:var(--blue);border-color:transparent;}
-.status-pill.sel-andamento{background:var(--amber-bg);color:var(--amber);border-color:transparent;}
-.status-pill.sel-resolvido{background:var(--green-bg);color:var(--green);border-color:transparent;}
-.status-pill.sel-feedback{background:var(--purple-bg);color:var(--purple);border-color:transparent;}
-
-/* ── TIMELINE ── */
-.timeline{list-style:none;}
-.tl-item{display:flex;gap:12px;padding-bottom:16px;position:relative;}
-.tl-item:not(:last-child)::before{content:'';position:absolute;left:7px;top:18px;bottom:0;width:1px;background:var(--border);}
-.tl-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--border2);background:var(--surface);flex-shrink:0;margin-top:2px;transition:background .15s,border-color .15s;}
-.tl-msg{font-size:13px;color:var(--text);}
-.tl-meta{font-size:12px;color:var(--text3);margin-top:2px;}
-.update-row{display:flex;gap:8px;margin-top:10px;}
-.update-row input{flex:1;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:var(--font);background:var(--surface);color:var(--text);outline:none;}
-.update-row input:focus{border-color:var(--border2);}
-
-/* ── TEAM ── */
-.member-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
-.member-name{font-size:14px;font-weight:500;}
-.member-meta{font-size:12px;color:var(--text2);margin-top:2px;}
-.info-box{background:var(--blue-bg);border:1px solid #C5D8F0;border-radius:var(--radius);padding:12px 14px;font-size:13px;color:var(--blue);margin-bottom:20px;line-height:1.6;}
-
-/* ── ACTIVITY ── */
-.activity-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;}
-.activity-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
-.activity-title-text{font-size:13px;font-weight:500;flex:1;}
-.activity-meta{font-size:12px;color:var(--text2);margin-top:6px;display:flex;gap:10px;flex-wrap:wrap;}
-.activity-check{width:20px;height:20px;border-radius:5px;border:1.5px solid var(--border2);background:var(--surface);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s;}
-.activity-check.done{background:var(--green);border-color:var(--green);}
-.activity-check.done::after{content:'✓';color:white;font-size:11px;font-weight:700;}
-
-/* ── PRÉDIOS ADMIN ── */
-.predio-admin-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
-.predio-admin-nome{font-size:14px;font-weight:500;}
-.predio-admin-slug{font-size:12px;font-family:var(--mono);color:var(--text3);margin-top:2px;}
-
-/* ── FOTOS ── */
-.fotos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;margin-bottom:12px;}
-.foto-thumb{position:relative;aspect-ratio:1;border-radius:var(--radius);overflow:hidden;background:var(--surface2);border:1px solid var(--border);cursor:pointer;}
-.foto-thumb img{width:100%;height:100%;object-fit:cover;}
-.foto-thumb .foto-del{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.55);border:none;color:#fff;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;}
-.foto-thumb:hover .foto-del{opacity:1;}
-.upload-area{border:2px dashed var(--border);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;transition:all .15s;background:var(--surface2);}
-.upload-area:hover{border-color:var(--border2);background:var(--surface);}
-.upload-area input{display:none;}
-.upload-area svg{width:28px;height:28px;stroke:var(--text3);margin-bottom:6px;}
-.upload-area p{font-size:13px;color:var(--text2);margin:0;}
-
-/* ── BUSCA ── */
-.search-bar{display:flex;gap:8px;margin-bottom:14px;align-items:center;}
-.search-input{flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius);font-size:15px;font-family:var(--font);background:var(--surface);color:var(--text);outline:none;}
-.search-input:focus{border-color:var(--border2);}
-.filter-toggle{padding:10px 14px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface);font-family:var(--font);font-size:13px;color:var(--text2);cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px;}
-.filter-toggle:hover{border-color:var(--border2);color:var(--text);}
-.filter-toggle.active{background:var(--surface2);border-color:var(--border2);color:var(--text);}
-.filter-panel{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;margin-bottom:14px;display:none;}
-.filter-panel.open{display:block;}
-.filter-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-@media(min-width:640px){.filter-grid{grid-template-columns:repeat(3,1fr);}}
-
-/* ── CHANGE PASSWORD ── */
-.change-pass-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:500;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(4px);}
-.change-pass-overlay.open{display:flex;}
-.change-pass-card{background:var(--surface);border-radius:var(--radius-lg);padding:32px;max-width:400px;width:100%;}
-.change-pass-title{font-size:20px;font-weight:600;margin-bottom:6px;}
-.change-pass-sub{font-size:14px;color:var(--text2);margin-bottom:24px;line-height:1.5;}
-
-.toast{position:fixed;bottom:calc(86px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%) translateY(16px);background:var(--accent);color:var(--accent-fg);padding:10px 22px;border-radius:99px;font-size:13px;font-weight:500;z-index:999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.15);}
-.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-@media(min-width:768px){.toast{bottom:32px;}}
-
-/* ── MULTI SELECT CHECKBOXES ── */
-.check-list{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
-.check-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:border-color .12s;}
-.check-item:hover{border-color:var(--border2);}
-.check-item input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;}
-.check-item label{font-size:14px;cursor:pointer;flex:1;}
-</style>
-</head>
-<body>
-
-<!-- LOGIN -->
-<div id="page-login" class="center-page active">
-  <div class="auth-card">
-    <div class="auth-logo">⬡ Operação JFL Inc</div>
-    <div class="auth-sub">Faça login para continuar</div>
-    <div class="field"><label>E-mail</label><input type="email" id="lp-email" autocomplete="email" onkeydown="if(event.key==='Enter')fazerLogin()"></div>
-    <div class="field"><label>Senha</label><input type="password" id="lp-pass" autocomplete="current-password" onkeydown="if(event.key==='Enter')fazerLogin()"></div>
-    <button class="btn btn-primary" onclick="fazerLogin()">Entrar</button>
-    <div id="lp-msg" style="margin-top:12px;font-size:13px;text-align:center;"></div>
-  </div>
-</div>
-
-<!-- SELEÇÃO DE PRÉDIO -->
-<div id="page-predio" class="center-page">
-  <div class="auth-card">
-    <div class="auth-logo">⬡ Operação JFL Inc</div>
-    <div class="auth-sub" id="predio-sub">Olá! Selecione o prédio que deseja operar.</div>
-    <div class="predio-grid" id="predio-grid"></div>
-    <button class="btn btn-ghost btn-sm" style="width:100%;" onclick="fazerLogout()">Sair</button>
-  </div>
-</div>
-
-<!-- APP -->
-<div id="app">
-  <div class="topbar">
-    <div class="topbar-left">
-      <div class="topbar-brand">⬡ JFL Inc</div>
-      <button class="predio-switcher" onclick="showPredioSelector()" id="predio-switcher-btn">
-        <span id="predio-nome-ativo">—</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 16l5-5 5 5"/><path d="M7 8l5 5 5-5" opacity=".4"/></svg>
-      </button>
-    </div>
-    <div class="topbar-right">
-      <span class="topbar-user" id="app-user-label"></span>
-      <button class="btn btn-ghost btn-sm" onclick="showNewTicket()">+ Ticket</button>
-    </div>
-  </div>
-
-  <div class="layout">
-    <!-- SIDEBAR -->
-    <div class="sidebar">
-      <div class="nav-section">Visão</div>
-      <button class="nav-item active" onclick="showScreen('dashboard',this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        Dashboard
-      </button>
-      <button class="nav-item" onclick="showScreen('tickets',this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
-        Tickets
-      </button>
-      <button class="nav-item" onclick="showScreen('relatorios',this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-        Relatórios
-      </button>
-      <div class="nav-section admin-only" style="display:none;">Admin</div>
-      <button class="nav-item admin-only" style="display:none;" onclick="showScreen('team',this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-        Time
-      </button>
-      <button class="nav-item superadmin-only" style="display:none;" onclick="showScreen('predios',this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-        Prédios
-      </button>
-      <div class="nav-section">Conta</div>
-      <button class="nav-item" onclick="showPredioSelector()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 16l4-4m0 0l-4-4m4 4H7"/><path d="M7 4H5a2 2 0 00-2 2v12a2 2 0 002 2h2"/></svg>
-        Trocar prédio
-      </button>
-      <button class="nav-item" onclick="fazerLogout()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><line x1="19" y1="8" x2="23" y2="12"/><line x1="23" y1="8" x2="19" y2="12"/></svg>
-        Sair
-      </button>
-    </div>
-
-    <!-- MAIN -->
-    <div class="main-content">
-
-      <!-- DASHBOARD -->
-      <div class="screen active" id="screen-dashboard">
-        <div class="stats-row">
-          <div class="stat-card" onclick="irParaTickets('aberto')">
-            <svg class="stat-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-            <div class="stat-label">Em aberto</div><div class="stat-value" id="s-aberto">—</div><div class="stat-hint">toque para ver</div>
-          </div>
-          <div class="stat-card" onclick="irParaTickets('em andamento')">
-            <svg class="stat-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-            <div class="stat-label">Em andamento</div><div class="stat-value" id="s-andamento">—</div><div class="stat-hint">toque para ver</div>
-          </div>
-          <div class="stat-card" onclick="irParaTickets('resolvido')">
-            <svg class="stat-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-            <div class="stat-label">Resolvidos</div><div class="stat-value" id="s-resolvido">—</div><div class="stat-hint">toque para ver</div>
-          </div>
-          <div class="stat-card stat-red" onclick="irParaTicketsHoje()">
-            <svg class="stat-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-            <div class="stat-label">Prazo hoje</div><div class="stat-value" id="s-hoje">—</div><div class="stat-hint">toque para ver</div>
-          </div>
-        </div>
-        <div class="section-title">🔴 Alta prioridade</div>
-        <div id="dash-alta"><div class="loader">Carregando...</div></div>
-        <div class="section-title" style="margin-top:32px;">⏰ Prazo hoje</div>
-        <div id="dash-hoje"><div class="loader">Carregando...</div></div>
-      </div>
-
-      <!-- TICKETS -->
-      <div class="screen" id="screen-tickets">
-        <div class="filter-row">
-          <button class="chip active" onclick="setFilter('todos',this)">Todos</button>
-          <button class="chip" onclick="setFilter('aberto',this)">Aberto</button>
-          <button class="chip" onclick="setFilter('em andamento',this)">Em andamento</button>
-          <button class="chip" onclick="setFilter('resolvido',this)">Resolvido</button>
-          <button class="chip" onclick="setFilter('feedback ao cliente',this)">Feedback</button>
-        </div>
-        <div id="ticket-list"><div class="loader">Carregando...</div></div>
-      </div>
-
-      <!-- TEAM -->
-      <div class="screen" id="screen-team">
-        <div class="info-box">👤 Membros vinculados a <strong id="team-predio-label">este prédio</strong>. Admins e superadmins acessam todos os prédios automaticamente.</div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-          <div class="section-title" style="margin:0;">Membros</div>
-          <button class="btn btn-ghost btn-sm" onclick="openAddMember()">+ Adicionar</button>
-        </div>
-        <div id="team-list"><div class="loader">Carregando...</div></div>
-      </div>
-
-      <!-- RELATÓRIOS -->
-      <div class="screen" id="screen-relatorios">
-        <div class="section-title" style="margin-top:0;">Exportar Relatório</div>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:16px;">
-          <div style="font-size:14px;font-weight:500;margin-bottom:16px;">Filtros</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div class="field" style="margin:0;">
-              <label>Status</label>
-              <select id="rel-status">
-                <option value="">Todos</option>
-                <option value="aberto">Aberto</option>
-                <option value="em andamento">Em andamento</option>
-                <option value="resolvido">Resolvido</option>
-                <option value="feedback ao cliente">Feedback</option>
-              </select>
-            </div>
-            <div class="field" style="margin:0;">
-              <label>Prioridade</label>
-              <select id="rel-prio">
-                <option value="">Todas</option>
-                <option value="Alta">Alta</option>
-                <option value="Média">Média</option>
-                <option value="Baixa">Baixa</option>
-              </select>
-            </div>
-            <div class="field" style="margin:0;">
-              <label>Data início</label>
-              <input type="date" id="rel-de">
-            </div>
-            <div class="field" style="margin:0;">
-              <label>Data fim</label>
-              <input type="date" id="rel-ate">
-            </div>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          <button class="btn btn-primary" onclick="exportar('excel')" style="display:flex;align-items:center;justify-content:center;gap:8px;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-            Excel (.xlsx)
-          </button>
-          <button class="btn btn-ghost" onclick="exportar('pdf')" style="display:flex;align-items:center;justify-content:center;gap:8px;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            PDF
-          </button>
-        </div>
-        <div id="rel-msg" style="margin-top:12px;font-size:13px;text-align:center;"></div>
-        <div class="divider"></div>
-        <div class="section-title">Notificações por e-mail</div>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;">
-          <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px;">
-            E-mails são enviados automaticamente quando um ticket é aberto ou tem o status atualizado. Configure o SMTP nas variáveis do Railway.
-          </div>
-          <div style="font-size:12px;background:var(--surface2);border-radius:var(--radius);padding:12px;font-family:var(--mono);line-height:2;color:var(--text2);">
-            SMTP_HOST=smtp.gmail.com<br>
-            SMTP_PORT=587<br>
-            SMTP_USER=seu@email.com<br>
-            SMTP_PASS=sua-senha-de-app<br>
-            SMTP_SECURE=false
-          </div>
-        </div>
-      </div>
-
-      <!-- PRÉDIOS (superadmin) -->
-      <div class="screen" id="screen-predios">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-          <div class="section-title" style="margin:0;">Prédios / Tenants</div>
-          <button class="btn btn-ghost btn-sm" onclick="openAddPredio()">+ Novo prédio</button>
-        </div>
-        <div id="predios-list"><div class="loader">Carregando...</div></div>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- MOBILE TABS -->
-  <div class="bottom-tabs">
-    <button class="bottom-tab active" data-tab onclick="showScreen('dashboard',this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      Dashboard
-    </button>
-    <button class="bottom-tab" data-tab onclick="showScreen('tickets',this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
-      Tickets
-    </button>
-    <button class="bottom-tab" data-tab onclick="showScreen('relatorios',this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
-      Relatórios
-    </button>
-    <button class="bottom-tab admin-only" data-tab style="display:none;" onclick="showScreen('team',this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-      Time
-    </button>
-  </div>
-  <button class="fab" onclick="showNewTicket()">+</button>
-</div>
-
-<!-- OVERLAY: TROCAR PRÉDIO (inline) -->
-<div class="overlay" id="overlay-predio" onclick="closeOverlay('overlay-predio',event)">
-  <div class="drawer" style="max-width:420px;">
-    <div class="drawer-handle"></div>
-    <div class="drawer-body">
-      <div class="drawer-title">Selecionar prédio</div>
-      <div class="predio-grid" id="switch-predio-grid"></div>
-      <button class="btn btn-ghost" style="width:100%;margin-top:4px;" onclick="closeOverlayById('overlay-predio')">Cancelar</button>
-    </div>
-  </div>
-</div>
-
-<!-- OVERLAY: NOVO TÍQUETE -->
-<div class="overlay" id="overlay-novo" onclick="closeOverlay('overlay-novo',event)">
-  <div class="drawer">
-    <div class="drawer-handle"></div>
-    <div class="drawer-body">
-      <div class="drawer-title">Abrir ticket</div>
-      <div class="field"><label>Aberto por</label><input type="text" id="n-autor" readonly></div>
-      <div class="field"><label>Origem</label>
-        <select id="n-origem">
-          <option value="">Selecionar...</option>
-          <option>WhatsApp</option><option>Presencialmente</option>
-          <option>Identificação interna</option><option>E-mail</option>
-        </select>
-      </div>
-      <div class="field"><label>Categoria</label>
-        <select id="n-cat">
-          <option value="">Selecionar...</option>
-          <option>Manutenção</option><option>Limpeza / Governança</option>
-          <option>Portaria / Acesso</option><option>Internet / TV</option>
-          <option>Climatização / AC</option><option>Hidráulica</option>
-          <option>Elétrica</option><option>Solicitação de serviço</option>
-          <option>Reclamação</option><option>Outro</option>
-        </select>
-      </div>
-      <div class="field"><label>Descrição</label><textarea id="n-desc" placeholder="O que aconteceu?"></textarea></div>
-      <div class="field"><label>Local / Unidade</label><input type="text" id="n-local" placeholder="Apto 204, Área comum..."></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div class="field"><label>Prioridade</label>
-          <select id="n-prio"><option>Baixa</option><option selected>Média</option><option>Alta</option></select>
-        </div>
-        <div class="field"><label>Prazo previsto</label><input type="date" id="n-prazo"></div>
-      </div>
-      <div class="field"><label>Responsável</label><select id="n-resp"><option value="">A definir</option></select></div>
-      <div class="field">
-        <label>Fotos / Anexos <span id="n-fotos-count" style="font-weight:400;color:var(--text3);">0/10</span></label>
-        <input type="file" id="n-fotos" accept="image/*,application/pdf,.pdf" multiple style="display:none;">
-        <div id="n-fotos-preview" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px;margin-bottom:8px;"></div>
-        <button type="button" class="btn btn-ghost btn-sm" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;" onclick="document.getElementById('n-fotos').click()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Câmera / Biblioteca / Arquivos
-        </button>
-      </div>
-      <button class="btn btn-primary" onclick="criarTicket()">Abrir ticket</button>
-      <div id="n-msg" style="margin-top:10px;font-size:13px;text-align:center;"></div>
-    </div>
-  </div>
-</div>
-
-<!-- OVERLAY: DETALHE -->
-<div class="overlay" id="overlay-detail" onclick="closeOverlay('overlay-detail',event)">
-  <div class="drawer">
-    <div class="drawer-handle"></div>
-    <div class="drawer-body" id="detail-body"></div>
-  </div>
-</div>
-
-<!-- OVERLAY: ADICIONAR MEMBRO -->
-<div class="overlay" id="overlay-member" onclick="closeOverlay('overlay-member',event)">
-  <div class="drawer">
-    <div class="drawer-handle"></div>
-    <div class="drawer-body">
-      <div class="drawer-title">Adicionar membro</div>
-      <div class="field"><label>Nome completo</label><input type="text" id="m-nome" placeholder="Carlos Silva"></div>
-      <div class="field"><label>Cargo / Setor</label><input type="text" id="m-cargo" placeholder="Manutenção"></div>
-      <div class="field"><label>E-mail</label><input type="email" id="m-email"></div>
-      <div class="field"><label>Senha inicial</label><input type="text" id="m-pass" placeholder="mínimo 6 caracteres"></div>
-      <div class="field"><label>Perfil</label>
-        <select id="m-role">
-          <option value="membro">Membro (operação)</option>
-          <option value="admin">Admin</option>
-          <option value="superadmin">Superadmin</option>
-        </select>
-      </div>
-      <div class="field" id="m-predios-field">
-        <label>Prédios com acesso</label>
-        <div class="check-list" id="m-predios-list"></div>
-        <div style="font-size:12px;color:var(--text2);">Admins e superadmins têm acesso a todos automaticamente.</div>
-      </div>
-      <button class="btn btn-primary" onclick="adicionarMembro()">Criar acesso</button>
-      <div id="m-msg" style="margin-top:10px;font-size:13px;text-align:center;"></div>
-    </div>
-  </div>
-</div>
-
-<!-- OVERLAY: NOVO PRÉDIO -->
-<div class="overlay" id="overlay-predio-novo" onclick="closeOverlay('overlay-predio-novo',event)">
-  <div class="drawer">
-    <div class="drawer-handle"></div>
-    <div class="drawer-body">
-      <div class="drawer-title">Novo prédio</div>
-      <div class="field"><label>Nome do prédio</label><input type="text" id="np-nome" placeholder="Ex: Edifício Jardins"></div>
-      <div class="field"><label>Slug (identificador único)</label><input type="text" id="np-slug" placeholder="ex: jardins, torre-b"></div>
-      <button class="btn btn-primary" onclick="criarPredio()">Criar prédio</button>
-      <div id="np-msg" style="margin-top:10px;font-size:13px;text-align:center;"></div>
-    </div>
-  </div>
-</div>
-
-<!-- OVERLAY: TROCAR SENHA (primeiro login) -->
-<div class="change-pass-overlay" id="overlay-change-pass">
-  <div class="change-pass-card">
-    <div class="change-pass-title">🔐 Defina sua senha</div>
-    <div class="change-pass-sub" id="change-pass-sub">Por segurança, você precisa criar uma nova senha antes de continuar.</div>
-    <div class="field" id="change-pass-atual-field" style="display:none;">
-      <label>Senha atual</label>
-      <input type="password" id="cp-atual" placeholder="••••••••">
-    </div>
-    <div class="field">
-      <label>Nova senha</label>
-      <input type="password" id="cp-nova" placeholder="mínimo 6 caracteres">
-    </div>
-    <div class="field">
-      <label>Confirmar nova senha</label>
-      <input type="password" id="cp-confirma" placeholder="repita a senha">
-    </div>
-    <button class="btn btn-primary" onclick="trocarSenha()">Salvar e continuar</button>
-    <div id="cp-msg" style="margin-top:10px;font-size:13px;text-align:center;"></div>
-  </div>
-</div>
-
-<div class="toast" id="toast"></div>
-
-<script>
-// ════════════════════════════════════════════════
-// ESTADO
-// ════════════════════════════════════════════════
-let token       = localStorage.getItem('op_token') || null;
-let currentUser = null;     // { id, nome, email, cargo, role, predios[] }
-let predioAtivo = null;     // { id, nome, slug }
-let allTickets  = [];
-let membersList = [];
-let allPredios  = [];
-let filterAtual = 'todos';
-const hoje = new Date().toISOString().split('T')[0];
-
-// ════════════════════════════════════════════════
-// HTTP
-// ════════════════════════════════════════════════
-async function api(method, path, body) {
-  const opts = { method, headers: { 'Content-Type': 'application/json' } };
-  if (token)      opts.headers['Authorization']  = 'Bearer ' + token;
-  if (predioAtivo) opts.headers['x-predio-id']   = predioAtivo.id;
-  if (body)       opts.body = JSON.stringify(body);
-  const res  = await fetch(path, opts);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.erro || 'Erro');
-  return data;
-}
-const GET   = p    => api('GET',    p);
-const POST  = (p,b)=> api('POST',   p, b);
-const PATCH = (p,b)=> api('PATCH',  p, b);
-const DEL   = p    => api('DELETE', p);
-
-// ════════════════════════════════════════════════
-// INIT
-// ════════════════════════════════════════════════
-window.addEventListener('load', async () => {
-  console.log('🚀 App v2.1 - fotos ativas');
-  if (!token) { showPage('login'); return; }
-  try {
-    const me = await api('GET', '/api/auth/me');
-    currentUser = me;
-    // Tenta restaurar prédio da sessão anterior
-    const savedId = parseInt(localStorage.getItem('op_predio_id'));
-    if (savedId && me.predios.find(p => p.id === savedId)) {
-      predioAtivo = me.predios.find(p => p.id === savedId);
-      entrarNoApp();
-    } else if (me.predios.length === 1) {
-      predioAtivo = me.predios[0];
-      entrarNoApp();
-    } else {
-      showPage('predio');
-      renderPredioGrid(me.predios, 'predio-grid');
-    }
-  } catch {
-    token = null;
-    localStorage.removeItem('op_token');
-    showPage('login');
-  }
+// ── MULTER ────────────────────────────────────────────────────
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename:    (req, file, cb) => {
+    const ext  = path.extname(file.originalname).toLowerCase();
+    const name = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
+    cb(null, name);
+  },
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.jpg','.jpeg','.png','.webp','.gif','.pdf'];
+    cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
+  },
 });
 
-// ════════════════════════════════════════════════
-// AUTH
-// ════════════════════════════════════════════════
-async function fazerLogin() {
-  const email = document.getElementById('lp-email').value.trim();
-  const senha = document.getElementById('lp-pass').value;
-  const msg   = document.getElementById('lp-msg');
-  if (!email || !senha) { msg.className='msg-error'; msg.textContent='Preencha e-mail e senha.'; return; }
-  msg.textContent='Entrando...'; msg.className='';
-  try {
-    const res = await fetch('/api/auth/login', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ email, senha })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.erro);
-    token       = data.token;
-    currentUser = { ...data.usuario, predios: data.predios };
-    localStorage.setItem('op_token', token);
+// ── NODEMAILER ────────────────────────────────────────────────
+const mailer = nodemailer.createTransport({
+  host:   process.env.SMTP_HOST   || 'smtp.gmail.com',
+  port:   parseInt(process.env.SMTP_PORT || '587'),
+  secure: process.env.SMTP_SECURE === 'true',
+  auth: {
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+  },
+});
 
-    if (data.predios.length === 0) {
-      msg.className='msg-error'; msg.textContent='Sem prédios vinculados. Contate o admin.'; return;
-    }
-    if (data.predios.length === 1) {
-      predioAtivo = data.predios[0];
-      entrarNoApp();
+async function enviarEmail({ to, subject, html }) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.log(`[EMAIL] SMTP não configurado — pulando envio para ${to}`);
+    return;
+  }
+  if (!to || !to.includes('@')) { console.log(`[EMAIL] Destinatário inválido: ${to}`); return; }
+  try {
+    console.log(`[EMAIL] Enviando para ${to} | assunto: ${subject}`);
+    const info = await mailer.sendMail({
+      from: `"Operação JFL Inc" <${process.env.SMTP_USER}>`,
+      to, subject, html,
+    });
+    console.log(`[EMAIL] ✅ Enviado! MessageId: ${info.messageId}`);
+  } catch (e) {
+    console.error(`[EMAIL] ❌ Erro ao enviar para ${to}:`, e.message);
+  }
+}
+
+// ── EMAIL TEMPLATES ───────────────────────────────────────────
+
+function emailBoasVindas({ nome, email, senha, predios, role }) {
+  const link = APP_URL;
+  const prediosList = predios.length ? predios.join(', ') : '(a definir)';
+  return {
+    to: email,
+    subject: `[JFL] Bem-vindo ao sistema de Operação Predial!`,
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:#1A1917;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0;">
+          <h2 style="margin:0;font-size:18px;">⬡ Operação JFL Inc</h2>
+        </div>
+        <div style="background:#f9f9f7;padding:28px 24px;border:1px solid #e2ded6;border-top:none;border-radius:0 0 8px 8px;">
+          <p style="margin:0 0 16px;font-size:16px;color:#1a1917;">Olá, <strong>${nome}</strong>! 👋</p>
+          <p style="margin:0 0 20px;font-size:14px;color:#6b6860;line-height:1.6;">
+            Seu acesso ao sistema de Operação Predial da JFL Inc foi criado. Use as credenciais abaixo para entrar e você será solicitado a trocar a senha no primeiro acesso.
+          </p>
+          <div style="background:#fff;border:1px solid #e2ded6;border-radius:8px;padding:20px;margin-bottom:20px;">
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+              <tr><td style="padding:8px 0;color:#6b6860;width:110px;">🔗 Link</td><td style="padding:8px 0;"><a href="${link}" style="color:#1A4F8A;">${link}</a></td></tr>
+              <tr><td style="padding:8px 0;color:#6b6860;">📧 E-mail</td><td style="padding:8px 0;font-weight:600;">${email}</td></tr>
+              <tr><td style="padding:8px 0;color:#6b6860;">🔑 Senha</td><td style="padding:8px 0;font-family:monospace;background:#f0eee8;padding:4px 8px;border-radius:4px;font-size:15px;font-weight:600;">${senha}</td></tr>
+              <tr><td style="padding:8px 0;color:#6b6860;">🏢 Prédios</td><td style="padding:8px 0;">${prediosList}</td></tr>
+              <tr><td style="padding:8px 0;color:#6b6860;">👤 Perfil</td><td style="padding:8px 0;">${role}</td></tr>
+            </table>
+          </div>
+          <a href="${link}" style="display:inline-block;background:#1A1917;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">
+            Acessar o sistema →
+          </a>
+          <p style="margin:20px 0 0;font-size:12px;color:#a09d98;">
+            Por segurança, troque sua senha assim que entrar. Se tiver dúvidas, fale com o administrador do sistema.
+          </p>
+        </div>
+      </div>`,
+  };
+}
+
+function emailTicketAberto(ticket, autorEmail) {
+  return {
+    to: autorEmail,
+    subject: `[JFL] Ticket #${ticket.id} aberto — ${ticket.titulo}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:#1A1917;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0;">
+          <h2 style="margin:0;font-size:18px;">⬡ Operação JFL Inc</h2>
+        </div>
+        <div style="background:#f9f9f7;padding:24px;border:1px solid #e2ded6;border-top:none;border-radius:0 0 8px 8px;">
+          <p style="margin:0 0 16px;font-size:15px;color:#1a1917;">Ticket aberto com sucesso!</p>
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:8px 0;color:#6b6860;width:120px;">Ticket</td><td style="padding:8px 0;font-weight:600;">#${ticket.id}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Título</td><td style="padding:8px 0;">${ticket.titulo}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Categoria</td><td style="padding:8px 0;">${ticket.categoria||'—'}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Prioridade</td><td style="padding:8px 0;">${ticket.prioridade}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Local</td><td style="padding:8px 0;">${ticket.local||'—'}</td></tr>
+            ${ticket.prazo ? `<tr><td style="padding:8px 0;color:#6b6860;">Prazo</td><td style="padding:8px 0;">${ticket.prazo}</td></tr>` : ''}
+          </table>
+          ${ticket.descricao ? `<div style="background:#fff;border:1px solid #e2ded6;border-radius:6px;padding:12px;margin-top:12px;font-size:14px;color:#1a1917;">${ticket.descricao}</div>` : ''}
+        </div>
+      </div>`,
+  };
+}
+
+function emailStatusAtualizado(ticket, novoStatus, autorNome, responsavelEmail) {
+  const cores = { aberto:'#1A4F8A','em andamento':'#92590A',resolvido:'#1E6B3C','feedback ao cliente':'#6B21A8' };
+  const cor = cores[novoStatus] || '#1A1917';
+  return {
+    to: responsavelEmail,
+    subject: `[JFL] Ticket #${ticket.id} → ${novoStatus}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:#1A1917;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0;">
+          <h2 style="margin:0;font-size:18px;">⬡ Operação JFL Inc</h2>
+        </div>
+        <div style="background:#f9f9f7;padding:24px;border:1px solid #e2ded6;border-top:none;border-radius:0 0 8px 8px;">
+          <p style="margin:0 0 12px;font-size:15px;color:#1a1917;">Status atualizado por <strong>${autorNome}</strong></p>
+          <div style="display:inline-block;background:${cor}20;color:${cor};padding:6px 16px;border-radius:99px;font-size:13px;font-weight:600;margin-bottom:16px;">${novoStatus}</div>
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:8px 0;color:#6b6860;width:120px;">Ticket</td><td style="padding:8px 0;font-weight:600;">#${ticket.id}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Título</td><td style="padding:8px 0;">${ticket.titulo}</td></tr>
+          </table>
+        </div>
+      </div>`,
+  };
+}
+
+function emailPrazoVencendo(ticket, predioNome, responsavelEmail) {
+  const prazoFmt = new Date(ticket.prazo).toLocaleDateString('pt-BR');
+  return {
+    to: responsavelEmail,
+    subject: `[JFL] ⏰ Ticket #${ticket.id} vence amanhã — ${ticket.titulo}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:#92590A;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0;">
+          <h2 style="margin:0;font-size:18px;">⏰ Prazo vencendo amanhã</h2>
+        </div>
+        <div style="background:#fdf5e6;padding:24px;border:1px solid #e8d0a8;border-top:none;border-radius:0 0 8px 8px;">
+          <p style="margin:0 0 16px;font-size:15px;color:#1a1917;">O ticket abaixo vence <strong>amanhã (${prazoFmt})</strong> e ainda não foi resolvido.</p>
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:8px 0;color:#6b6860;width:120px;">Ticket</td><td style="padding:8px 0;font-weight:600;">#${ticket.id}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Título</td><td style="padding:8px 0;">${ticket.titulo}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Prédio</td><td style="padding:8px 0;">${predioNome}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Prioridade</td><td style="padding:8px 0;">${ticket.prioridade}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Prazo</td><td style="padding:8px 0;color:#92590A;font-weight:600;">${prazoFmt}</td></tr>
+          </table>
+        </div>
+      </div>`,
+  };
+}
+
+function emailPrazoAtrasado(ticket, predioNome, responsavelEmail) {
+  const prazoFmt = new Date(ticket.prazo).toLocaleDateString('pt-BR');
+  return {
+    to: responsavelEmail,
+    subject: `[JFL] 🔴 Ticket #${ticket.id} ATRASADO — ${ticket.titulo}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:#C0392B;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0;">
+          <h2 style="margin:0;font-size:18px;">🔴 Ticket em atraso</h2>
+        </div>
+        <div style="background:#fdf0ee;padding:24px;border:1px solid #f0c8c4;border-top:none;border-radius:0 0 8px 8px;">
+          <p style="margin:0 0 16px;font-size:15px;color:#1a1917;">O ticket abaixo está <strong>atrasado desde ${prazoFmt}</strong> e ainda não foi resolvido.</p>
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:8px 0;color:#6b6860;width:120px;">Ticket</td><td style="padding:8px 0;font-weight:600;">#${ticket.id}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Título</td><td style="padding:8px 0;">${ticket.titulo}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Prédio</td><td style="padding:8px 0;">${predioNome}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Prioridade</td><td style="padding:8px 0;">${ticket.prioridade}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b6860;">Prazo era</td><td style="padding:8px 0;color:#C0392B;font-weight:600;">${prazoFmt}</td></tr>
+          </table>
+        </div>
+      </div>`,
+  };
+}
+
+// ── DATABASE ──────────────────────────────────────────────────
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+});
+
+// ── MIDDLEWARE ────────────────────────────────────────────────
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(UPLOAD_DIR));
+
+// ── AUTH ──────────────────────────────────────────────────────
+function auth(req, res, next) {
+  const h = req.headers.authorization;
+  if (!h) return res.status(401).json({ erro: 'Sem token' });
+  try { req.user = jwt.verify(h.replace('Bearer ', ''), SECRET); next(); }
+  catch { res.status(401).json({ erro: 'Token inválido' }); }
+}
+
+function comPredio(req, res, next) {
+  const pid = parseInt(req.headers['x-predio-id']);
+  if (!pid) return res.status(400).json({ erro: 'Prédio não selecionado' });
+  if (['superadmin','admin'].includes(req.user.role)) { req.predio_id = pid; return next(); }
+  pool.query('SELECT 1 FROM usuario_predios WHERE usuario_id=$1 AND predio_id=$2', [req.user.id, pid])
+    .then(({ rows }) => {
+      if (!rows.length) return res.status(403).json({ erro: 'Sem acesso a este prédio' });
+      req.predio_id = pid; next();
+    }).catch(() => res.status(500).json({ erro: 'Erro interno' }));
+}
+
+function adminOnly(req, res, next) {
+  if (!['superadmin','admin'].includes(req.user.role)) return res.status(403).json({ erro: 'Apenas admins' });
+  next();
+}
+function superOnly(req, res, next) {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ erro: 'Apenas superadmin' });
+  next();
+}
+
+// ══════════════════════════════════════════════════════════════
+// AUTH ROUTES
+// ══════════════════════════════════════════════════════════════
+
+app.post('/api/auth/login', async (req, res) => {
+  const { email, senha } = req.body;
+  if (!email || !senha) return res.status(400).json({ erro: 'E-mail e senha obrigatórios' });
+  try {
+    const { rows } = await pool.query('SELECT * FROM usuarios WHERE email=$1 AND ativo=TRUE', [email.toLowerCase().trim()]);
+    const u = rows[0];
+    if (!u || !(await bcrypt.compare(senha, u.senha_hash))) return res.status(401).json({ erro: 'E-mail ou senha incorretos' });
+
+    let predios = [];
+    if (['superadmin','admin'].includes(u.role)) {
+      const { rows: ps } = await pool.query('SELECT id,nome,slug FROM predios WHERE ativo=TRUE ORDER BY nome');
+      predios = ps;
     } else {
-      showPage('predio');
-      renderPredioGrid(data.predios, 'predio-grid');
+      const { rows: ps } = await pool.query(
+        `SELECT p.id,p.nome,p.slug FROM predios p JOIN usuario_predios up ON up.predio_id=p.id WHERE up.usuario_id=$1 AND p.ativo=TRUE ORDER BY p.nome`,
+        [u.id]
+      );
+      predios = ps;
     }
+
+    const token = jwt.sign({ id:u.id, role:u.role, nome:u.nome, email:u.email, cargo:u.cargo }, SECRET, { expiresIn:'7d' });
+    res.json({
+      token,
+      usuario: { id:u.id, nome:u.nome, email:u.email, cargo:u.cargo, role:u.role, must_change_password: u.must_change_password },
+      predios,
+    });
+  } catch(e) { console.error(e); res.status(500).json({ erro: 'Erro interno' }); }
+});
+
+app.get('/api/auth/me', auth, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT id,nome,email,cargo,role,must_change_password FROM usuarios WHERE id=$1', [req.user.id]);
+    const u = rows[0];
+    if (!u) return res.status(404).json({ erro: 'Não encontrado' });
+    let predios = [];
+    if (['superadmin','admin'].includes(u.role)) {
+      const { rows: ps } = await pool.query('SELECT id,nome,slug FROM predios WHERE ativo=TRUE ORDER BY nome');
+      predios = ps;
+    } else {
+      const { rows: ps } = await pool.query(
+        `SELECT p.id,p.nome,p.slug FROM predios p JOIN usuario_predios up ON up.predio_id=p.id WHERE up.usuario_id=$1 AND p.ativo=TRUE ORDER BY p.nome`,
+        [u.id]
+      );
+      predios = ps;
+    }
+    res.json({ ...u, predios });
+  } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
+});
+
+// POST /api/auth/change-password
+app.post('/api/auth/change-password', auth, async (req, res) => {
+  const { senha_atual, senha_nova } = req.body;
+  if (!senha_nova || senha_nova.length < 6) return res.status(400).json({ erro: 'Nova senha precisa ter ao menos 6 caracteres' });
+  try {
+    const { rows } = await pool.query('SELECT senha_hash FROM usuarios WHERE id=$1', [req.user.id]);
+    if (!rows[0]) return res.status(404).json({ erro: 'Usuário não encontrado' });
+    // Se não é primeiro login, valida senha atual
+    const { rows: uRow } = await pool.query('SELECT must_change_password FROM usuarios WHERE id=$1', [req.user.id]);
+    if (!uRow[0].must_change_password) {
+      if (!senha_atual) return res.status(400).json({ erro: 'Senha atual obrigatória' });
+      const ok = await bcrypt.compare(senha_atual, rows[0].senha_hash);
+      if (!ok) return res.status(401).json({ erro: 'Senha atual incorreta' });
+    }
+    const hash = await bcrypt.hash(senha_nova, 10);
+    await pool.query('UPDATE usuarios SET senha_hash=$1, must_change_password=FALSE WHERE id=$2', [hash, req.user.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
+});
+
+// ══════════════════════════════════════════════════════════════
+// PRÉDIOS
+// ══════════════════════════════════════════════════════════════
+
+app.get('/api/predios', auth, adminOnly, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM predios ORDER BY nome');
+  res.json(rows);
+});
+
+app.post('/api/predios', auth, superOnly, async (req, res) => {
+  const { nome, slug } = req.body;
+  if (!nome || !slug) return res.status(400).json({ erro: 'Nome e slug obrigatórios' });
+  try {
+    const { rows } = await pool.query('INSERT INTO predios (nome,slug) VALUES ($1,$2) RETURNING *', [nome, slug.toLowerCase().replace(/\s+/g,'-')]);
+    res.status(201).json(rows[0]);
   } catch(e) {
-    msg.className='msg-error'; msg.textContent=e.message;
-  }
-}
-
-function renderPredioGrid(predios, containerId) {
-  document.getElementById('predio-sub') && (
-    document.getElementById('predio-sub').textContent =
-      `Olá, ${currentUser.nome.split(' ')[0]}! Selecione o prédio.`
-  );
-  document.getElementById(containerId).innerHTML = predios.map(p => `
-    <button class="predio-btn" onclick="selecionarPredio(${p.id},'${encodeURIComponent(p.nome)}','${p.slug}')">
-      <div>
-        <div>${p.nome}</div>
-        <div class="predio-slug">${p.slug}</div>
-      </div>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 18l6-6-6-6"/></svg>
-    </button>`).join('');
-}
-
-function selecionarPredio(id, nomeEnc, slug) {
-  const nome = decodeURIComponent(nomeEnc);
-  predioAtivo = { id, nome, slug };
-  localStorage.setItem('op_predio_id', id);
-  closeOverlayById('overlay-predio');
-  entrarNoApp();
-}
-
-async function entrarNoApp() {
-  // Verifica se precisa trocar senha
-  if (currentUser.must_change_password) {
-    showPage('app'); // mostra o app por baixo
-    setTimeout(() => mostrarTrocaSenha(true), 300);
-  }
-  showPage('app');
-  document.getElementById('predio-nome-ativo').textContent = predioAtivo.nome;
-  document.getElementById('app-user-label').textContent =
-    `${currentUser.nome}${currentUser.cargo ? ' · '+currentUser.cargo : ''}`;
-  document.getElementById('team-predio-label').textContent = predioAtivo.nome;
-
-  // Mostra itens de admin/superadmin
-  const isAdmin = ['admin','superadmin'].includes(currentUser.role);
-  const isSuper = currentUser.role === 'superadmin';
-  document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdmin ? '' : 'none');
-  document.querySelectorAll('.superadmin-only').forEach(el => el.style.display = isSuper ? '' : 'none');
-
-  await Promise.all([loadStats(), loadTickets(), loadMembros(), isAdmin && loadAllPredios()]);
-  renderDashboard();
-  renderList();
-}
-
-function showPredioSelector() {
-  renderPredioGrid(currentUser.predios, 'switch-predio-grid');
-  document.getElementById('overlay-predio').classList.add('open');
-}
-
-function fazerLogout() {
-  token = null; currentUser = null; predioAtivo = null;
-  allTickets = []; membersList = []; allPredios = [];
-  localStorage.removeItem('op_token');
-  localStorage.removeItem('op_predio_id');
-  showPage('login');
-}
-
-// ════════════════════════════════════════════════
-// DATA
-// ════════════════════════════════════════════════
-let stats = {};
-async function loadStats()     { stats = await GET('/api/stats'); }
-async function loadTickets()   { allTickets = await GET('/api/tickets'); }
-async function loadMembros() {
-  try { membersList = await GET('/api/usuarios'); }
-  catch(e) { membersList = []; }
-  populateMemberSelect();
-}
-async function loadAllPredios(){ allPredios  = await api('GET','/api/predios'); renderPrediosList(); }
-
-function populateMemberSelect() {
-  const el = document.getElementById('n-resp');
-  if (!el) return;
-  el.innerHTML = '<option value="">A definir</option>' +
-    membersList.map(m => `<option value="${m.id}">${m.nome}${m.cargo?' – '+m.cargo:''}</option>`).join('');
-}
-
-// ════════════════════════════════════════════════
-// RENDER HELPERS
-// ════════════════════════════════════════════════
-function statusBadge(s) {
-  const m={aberto:'badge-aberto','em andamento':'badge-andamento',resolvido:'badge-resolvido','feedback ao cliente':'badge-feedback'};
-  const l={aberto:'Aberto','em andamento':'Em andamento',resolvido:'Resolvido','feedback ao cliente':'Feedback'};
-  return `<span class="badge ${m[s]||'badge-aberto'}">${l[s]||s}</span>`;
-}
-function prioBadge(p) {
-  return `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text2)"><span class="prio-dot prio-${p}"></span>${p}</span>`;
-}
-function fmtPrazo(d) {
-  if (!d) return '';
-  const ds = d.split('T')[0];
-  if (ds===hoje) return `<span style="color:var(--red);font-size:12px;font-weight:500;">Hoje</span>`;
-  if (ds<hoje)   return `<span style="color:var(--red);font-size:12px;">Atrasado</span>`;
-  return `<span style="font-size:12px;color:var(--text2)">${ds}</span>`;
-}
-function ticketCard(t) {
-  return `<div class="ticket-card" onclick="openDetail(${t.id})">
-    <div class="tc-top"><div class="tc-title">${t.titulo}</div>${statusBadge(t.status)}</div>
-    <div class="tc-meta"><span>${t.categoria||''}</span>${t.local?`<span>· ${t.local}</span>`:''}</div>
-    <div class="tc-bottom">
-      <div style="display:flex;align-items:center;gap:10px;">${prioBadge(t.prioridade||'Baixa')}${t.responsavel_nome?`<span style="font-size:12px;color:var(--text2)">${t.responsavel_nome}</span>`:''}</div>
-      ${fmtPrazo(t.prazo)}
-    </div>
-  </div>`;
-}
-function emptyState(msg) {
-  return `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>${msg}</div>`;
-}
-
-// ════════════════════════════════════════════════
-// DASHBOARD
-// ════════════════════════════════════════════════
-function irParaTickets(status) {
-  filterAtual = status;
-  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
-  // Ativa chip correto
-  document.querySelectorAll('.chip').forEach(c=>{
-    const txt = c.textContent.trim().toLowerCase();
-    if ((status==='aberto'&&txt==='aberto')||(status==='em andamento'&&txt==='em andamento')||(status==='resolvido'&&txt==='resolvido')) c.classList.add('active');
-  });
-  showScreen('tickets', null);
-  document.querySelectorAll('[data-tab]').forEach(t=>t.classList.remove('active'));
-  const tabs=[...document.querySelectorAll('[data-tab]')];
-  if(tabs[1]) tabs[1].classList.add('active');
-  renderList();
-}
-function irParaTicketsHoje() {
-  filterAtual = 'hoje';
-  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
-  showScreen('tickets', null);
-  document.querySelectorAll('[data-tab]').forEach(t=>t.classList.remove('active'));
-  const tabs=[...document.querySelectorAll('[data-tab]')];
-  if(tabs[1]) tabs[1].classList.add('active');
-  const prazoH = allTickets.filter(t=>t.prazo&&t.prazo.split('T')[0]===hoje&&t.status!=='resolvido');
-  document.getElementById('ticket-list').innerHTML = prazoH.length ? prazoH.map(ticketCard).join('') : emptyState('Sem tickets com prazo hoje.');
-}
-
-function renderDashboard() {
-  document.getElementById('s-aberto').textContent    = stats.aberto    ?? '—';
-  document.getElementById('s-andamento').textContent = stats.andamento ?? '—';
-  document.getElementById('s-resolvido').textContent = stats.resolvido ?? '—';
-  document.getElementById('s-hoje').textContent      = stats.hoje      ?? '—';
-  const alta   = allTickets.filter(t => t.prioridade==='Alta' && t.status!=='resolvido');
-  const prazoH = allTickets.filter(t => t.prazo && t.prazo.split('T')[0]===hoje && t.status!=='resolvido');
-  document.getElementById('dash-alta').innerHTML  = alta.length   ? alta.map(ticketCard).join('')   : emptyState('Sem tickets de alta prioridade.');
-  document.getElementById('dash-hoje').innerHTML  = prazoH.length ? prazoH.map(ticketCard).join('') : emptyState('Sem prazos para hoje.');
-}
-
-// ════════════════════════════════════════════════
-// TICKETS
-// ════════════════════════════════════════════════
-function renderList() {
-  // Se há filtros ativos, usa a busca server-side
-  const q = document.getElementById('search-input')?.value.trim();
-  const hasFilters = q || 
-    document.getElementById('f-status')?.value ||
-    document.getElementById('f-prio')?.value ||
-    document.getElementById('f-cat')?.value ||
-    document.getElementById('f-resp')?.value ||
-    document.getElementById('f-de')?.value ||
-    document.getElementById('f-ate')?.value;
-  
-  if (hasFilters) { buscarTickets(); return; }
-  
-  document.getElementById('ticket-list').innerHTML = allTickets.length ? allTickets.map(ticketCard).join('') : emptyState('Nenhum ticket encontrado.');
-}
-function setFilter(f, el) {
-  filterAtual=f;
-  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
-  el.classList.add('active');
-  renderList();
-}
-function showNewTicket() {
-  document.getElementById('n-msg').textContent='';
-  document.getElementById('n-autor').value = currentUser.nome + (currentUser.cargo?' – '+currentUser.cargo:'');
-  document.getElementById('overlay-novo').classList.add('open');
-}
-async function criarTicket() {
-  const origem = document.getElementById('n-origem').value;
-  const cat    = document.getElementById('n-cat').value;
-  const desc   = document.getElementById('n-desc').value.trim();
-  const local  = document.getElementById('n-local').value.trim();
-  const prio   = document.getElementById('n-prio').value;
-  const prazo  = document.getElementById('n-prazo').value || null;
-  const respId = document.getElementById('n-resp').value || null;
-  const msg    = document.getElementById('n-msg');
-  if (!origem||!cat||!desc) { msg.className='msg-error'; msg.textContent='Preencha origem, categoria e descrição.'; return; }
-  const titulo = cat + (local?' – '+local:'');
-  try {
-    const ticket = await POST('/api/tickets',{ titulo,descricao:desc,categoria:cat,local,origem,prioridade:prio,prazo,responsavel_id:respId });
-    // Upload fotos se houver
-    if (nFotosFiles.length > 0) {
-      msg.textContent = `Enviando ${nFotosFiles.length} foto(s)...`;
-      const fd = new FormData();
-      for (const f of nFotosFiles) fd.append('fotos', f);
-      await fetch(`/api/tickets/${ticket.id}/fotos`, {
-        method:'POST',
-        headers:{'Authorization':'Bearer '+token,'x-predio-id':String(predioAtivo.id)},
-        body: fd,
-      });
-    }
-    msg.className='msg-ok'; msg.textContent='✓ Ticket aberto!';
-    ['n-origem','n-cat','n-desc','n-local','n-prazo'].forEach(id=>document.getElementById(id).value='');
-    document.getElementById('n-prio').value='Média';
-    document.getElementById('n-resp').value='';
-    document.getElementById('n-fotos').value='';
-    nFotosFiles = [];
-    renderNFotosPreview();
-    await loadStats(); await loadTickets(); renderDashboard(); renderList();
-    setTimeout(()=>{ msg.textContent=''; closeOverlayById('overlay-novo'); },1200);
-  } catch(e) { msg.className='msg-error'; msg.textContent=e.message; }
-}
-
-// ════════════════════════════════════════════════
-// DETALHE
-// ════════════════════════════════════════════════
-async function openDetail(id) {
-  const t = allTickets.find(x=>x.id===id);
-  if (!t) return;
-  document.getElementById('overlay-detail').classList.add('open');
-  document.getElementById('detail-body').innerHTML='<div class="loader">Carregando...</div>';
-  const [hist, atvs] = await Promise.all([
-    GET(`/api/tickets/${id}/historico`),
-    GET(`/api/tickets/${id}/atividades`),
-  ]);
-  const atvsHtml = atvs.length ? atvs.map(a=>{
-    const done=a.status==='concluida';
-    return `<div class="activity-card">
-      <div class="activity-header">
-        <div class="activity-title-text" style="${done?'text-decoration:line-through;color:var(--text2);':''}">${a.titulo}</div>
-        <div class="activity-check ${done?'done':''}" onclick="toggleAtividade(${a.id},${id})"></div>
-      </div>
-      <div class="activity-meta">
-        ${a.responsavel_nome?`<span>👤 ${a.responsavel_nome}</span>`:''}
-        ${a.prazo?`<span>📅 ${a.prazo}</span>`:''}
-        ${a.criado_por?`<span>por ${a.criado_por}</span>`:''}
-      </div>
-    </div>`;
-  }).join('') : `<div style="font-size:13px;color:var(--text2);padding:8px 0">Nenhuma atividade ainda.</div>`;
-
-  // Substitui placeholder TICKETID pelo ID real na seção de fotos do template
-  // (feito via JS após render)
-  const detailHtml = `
-    <div class="detail-id">#${t.id} · ${predioAtivo.nome}</div>
-    <div class="detail-title">${t.titulo}</div>
-    <div style="display:flex;gap:8px;margin:10px 0 16px;flex-wrap:wrap;">${statusBadge(t.status)} ${prioBadge(t.prioridade||'Baixa')}</div>
-    <div class="detail-grid">
-      <div class="detail-field"><div class="dl">Categoria</div><div class="dv">${t.categoria||'—'}</div></div>
-      <div class="detail-field"><div class="dl">Local</div><div class="dv">${t.local||'—'}</div></div>
-      <div class="detail-field"><div class="dl">Aberto por</div><div class="dv">${t.autor_nome||'—'}</div></div>
-      <div class="detail-field"><div class="dl">Origem</div><div class="dv">${t.origem||'—'}</div></div>
-      <div class="detail-field"><div class="dl">Responsável</div><div class="dv">${t.responsavel_nome||'A definir'}</div></div>
-      <div class="detail-field"><div class="dl">Prazo</div><div class="dv">${t.prazo?fmtPrazo(t.prazo):'—'}</div></div>
-    </div>
-    ${t.descricao?`<div style="background:var(--surface2);border-radius:var(--radius);padding:12px 14px;font-size:14px;line-height:1.6;margin-bottom:4px;">${t.descricao}</div>`:''}
-    <div class="divider"></div>
-    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Atualizar status</div>
-    <div class="status-pills">
-      <button class="status-pill ${t.status==='aberto'?'sel-aberto':''}" onclick="updateStatus(${id},'aberto')">Aberto</button>
-      <button class="status-pill ${t.status==='em andamento'?'sel-andamento':''}" onclick="updateStatus(${id},'em andamento')">Em andamento</button>
-      <button class="status-pill ${t.status==='feedback ao cliente'?'sel-feedback':''}" onclick="updateStatus(${id},'feedback ao cliente')">Feedback</button>
-      <button class="status-pill ${t.status==='resolvido'?'sel-resolvido':''}" onclick="updateStatus(${id},'resolvido')">Resolvido</button>
-    </div>
-    <div style="margin-top:16px;">
-      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Registrar update</div>
-      <div class="update-row">
-        <input type="text" id="upd-txt" placeholder="O que foi feito / próximo passo...">
-        <button class="btn btn-primary" style="width:auto;padding:10px 16px;white-space:nowrap;" onclick="addUpdate(${id})">Salvar</button>
-      </div>
-    </div>
-    <div class="divider"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;">Atividades</div>
-      <button class="btn btn-ghost btn-sm" onclick="toggleNovaAtividade(${id})">+ Nova</button>
-    </div>
-    <div id="nova-atv-${id}" style="display:none;background:var(--surface2);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
-      <div class="field" style="margin-bottom:10px;"><label>Título</label><input type="text" id="atv-titulo-${id}" placeholder="O que precisa ser feito?"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div class="field" style="margin-bottom:0;"><label>Responsável</label><input type="text" id="atv-resp-${id}" placeholder="Nome"></div>
-        <div class="field" style="margin-bottom:0;"><label>Prazo</label><input type="date" id="atv-prazo-${id}"></div>
-      </div>
-      <button class="btn btn-primary" style="margin-top:12px;" onclick="criarAtividade(${id})">Adicionar</button>
-    </div>
-    ${atvsHtml}
-    <div class="divider"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;">📷 Fotos</div>
-      <button class="btn btn-ghost btn-sm" onclick="triggerFotoUpload(TICKETID)">+ Anexar</button>
-    </div>
-    <input type="file" id="foto-input-TICKETID" accept="image/*,.pdf" multiple style="display:none;" onchange="uploadFotos(TICKETID,this)">
-    <div id="fotos-grid-TICKETID" class="fotos-grid"></div>
-    <div id="fotos-msg-TICKETID" style="font-size:12px;color:var(--text2);margin-bottom:4px;"></div>
-    <div class="divider"></div>
-    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;">Histórico</div>
-    <ul class="timeline">
-      ${hist.length?hist.map(h=>`
-        <li class="tl-item">
-          <div class="tl-dot" style="${h.mensagem.includes('foto') ? 'background:var(--blue);border-color:var(--blue);' : ''}"></div>
-          <div class="tl-content">
-            <div class="tl-msg">${h.mensagem}</div>
-            <div class="tl-meta">${h.autor_nome?h.autor_nome+' · ':''}${new Date(h.criado_em).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
-            ${h.foto_url ? `<div style="margin-top:8px;"><img src="${h.foto_url}" style="max-width:120px;max-height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="verFoto('${h.foto_url}')"></div>` : ''}
-          </div>
-        </li>`).join(''):`<li class="tl-item"><div class="tl-dot"></div><div class="tl-content"><div class="tl-msg" style="color:var(--text2)">Sem atualizações ainda.</div></div></li>`}
-    </ul>
-    <div style="height:20px;"></div>
-  `;
-  // Substitui TICKETID pelo id real
-  document.getElementById('detail-body').innerHTML = detailHtml.replaceAll('TICKETID', String(id));
-  // Carrega fotos assincronamente após render
-  setTimeout(() => carregarFotos(id), 50);
-}
-
-async function updateStatus(id,status) {
-  try {
-    await PATCH(`/api/tickets/${id}/status`,{status});
-    const i=allTickets.findIndex(t=>t.id===id);
-    if(i>-1) allTickets[i].status=status;
-    await loadStats(); renderDashboard(); renderList(); await openDetail(id);
-    showToast('Status atualizado');
-  } catch(e){showToast('Erro: '+e.message);}
-}
-async function addUpdate(id) {
-  const txt=document.getElementById('upd-txt')?.value.trim();
-  if(!txt) return;
-  try{ await POST(`/api/tickets/${id}/historico`,{mensagem:txt}); await openDetail(id); showToast('Update registrado'); }
-  catch(e){showToast('Erro: '+e.message);}
-}
-
-// ════════════════════════════════════════════════
-// ATIVIDADES
-// ════════════════════════════════════════════════
-function toggleNovaAtividade(tid){
-  const el=document.getElementById('nova-atv-'+tid);
-  if(el) el.style.display=el.style.display==='none'?'block':'none';
-}
-async function criarAtividade(tid){
-  const titulo=document.getElementById('atv-titulo-'+tid)?.value.trim();
-  const resp=document.getElementById('atv-resp-'+tid)?.value.trim();
-  const prazo=document.getElementById('atv-prazo-'+tid)?.value||null;
-  if(!titulo) return;
-  try{ await POST(`/api/tickets/${tid}/atividades`,{titulo,responsavel_nome:resp||null,prazo}); await openDetail(tid); showToast('Atividade adicionada'); }
-  catch(e){showToast('Erro: '+e.message);}
-}
-async function toggleAtividade(atvId,tid){
-  try{ await PATCH(`/api/atividades/${atvId}/toggle`); await openDetail(tid); }
-  catch(e){showToast('Erro: '+e.message);}
-}
-
-// ════════════════════════════════════════════════
-// TEAM
-// ════════════════════════════════════════════════
-function openAddMember() {
-  ['m-nome','m-cargo','m-email','m-pass'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('m-role').value='membro';
-  document.getElementById('m-msg').textContent='';
-  // Preenche checkboxes de prédios
-  const listEl=document.getElementById('m-predios-list');
-  listEl.innerHTML=allPredios.map(p=>`
-    <label class="check-item">
-      <input type="checkbox" value="${p.id}" ${p.id===predioAtivo.id?'checked':''}>
-      <span>${p.nome}</span>
-    </label>`).join('');
-  document.getElementById('overlay-member').classList.add('open');
-}
-async function adicionarMembro(){
-  const nome=document.getElementById('m-nome').value.trim();
-  const cargo=document.getElementById('m-cargo').value.trim();
-  const email=document.getElementById('m-email').value.trim();
-  const senha=document.getElementById('m-pass').value;
-  const role=document.getElementById('m-role').value;
-  const msg=document.getElementById('m-msg');
-  const predio_ids=[...document.querySelectorAll('#m-predios-list input:checked')].map(el=>parseInt(el.value));
-  if(!nome||!email||!senha){msg.className='msg-error';msg.textContent='Preencha nome, e-mail e senha.';return;}
-  msg.textContent='Criando...';msg.className='';
-  try{
-    await POST('/api/usuarios',{nome,email,senha,cargo,role,predio_ids});
-    await loadMembros(); renderTeam();
-    msg.className='msg-ok';msg.textContent=`✓ ${nome} adicionado!`;
-    setTimeout(()=>closeOverlayById('overlay-member'),1600);
-  }catch(e){msg.className='msg-error';msg.textContent=e.message;}
-}
-async function removerMembro(id){
-  if(!confirm('Desativar este membro?')) return;
-  try{ await DEL(`/api/usuarios/${id}`); await loadMembros(); renderTeam(); showToast('Membro removido'); }
-  catch(e){showToast('Erro: '+e.message);}
-}
-function renderTeam(){
-  const el=document.getElementById('team-list');
-  if(!membersList.length){el.innerHTML=emptyState('Nenhum membro neste prédio.');return;}
-  el.innerHTML=membersList.map(m=>`
-    <div class="member-card">
-      <div>
-        <div class="member-name">${m.nome}</div>
-        <div class="member-meta">${m.cargo||'—'} · ${m.role}</div>
-        <div style="font-size:12px;color:var(--text3);">${m.email}</div>
-      </div>
-      ${m.id!==currentUser.id?`<button class="btn btn-ghost btn-sm btn-danger" onclick="removerMembro(${m.id})">Remover</button>`:''}
-    </div>`).join('');
-}
-
-// ════════════════════════════════════════════════
-// RELATÓRIOS
-// ════════════════════════════════════════════════
-function exportar(tipo) {
-  const status = document.getElementById('rel-status').value;
-  const prio   = document.getElementById('rel-prio').value;
-  const de     = document.getElementById('rel-de').value;
-  const ate    = document.getElementById('rel-ate').value;
-  const msg    = document.getElementById('rel-msg');
-  msg.textContent = 'Gerando arquivo...'; msg.className = '';
-  const params = new URLSearchParams();
-  if (status) params.set('status', status);
-  if (prio)   params.set('prioridade', prio);
-  if (de)     params.set('de', de);
-  if (ate)    params.set('ate', ate);
-  fetch(`/api/relatorios/${tipo}?${params}`, {
-    headers: { 'Authorization':'Bearer '+token, 'x-predio-id': String(predioAtivo.id) }
-  }).then(r => {
-    if (!r.ok) throw new Error('Erro ao gerar');
-    return r.blob();
-  }).then(blob => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `tickets-${new Date().toISOString().slice(0,10)}.${tipo==='excel'?'xlsx':'pdf'}`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    msg.className='msg-ok'; msg.textContent='✓ Download iniciado!';
-    setTimeout(()=>msg.textContent='',3000);
-  }).catch(e=>{ msg.className='msg-error'; msg.textContent=e.message; });
-}
-
-// ════════════════════════════════════════════════
-// FOTOS
-// ════════════════════════════════════════════════
-async function carregarFotos(ticketId) {
-  const grid = document.getElementById(`fotos-grid-${ticketId}`);
-  if (!grid) return;
-  try {
-    const fotos = await GET(`/api/tickets/${ticketId}/fotos`);
-    if (!fotos.length) {
-      grid.innerHTML='<div style="font-size:13px;color:var(--text2);padding:4px 0 8px;">Nenhuma foto anexada.</div>';
-      return;
-    }
-    grid.innerHTML = fotos.map(f => {
-      const isImg = f.mime_type && f.mime_type.startsWith('image/');
-      const url = `/uploads/${f.nome_arquivo}`;
-      const tamanho = f.tamanho ? (f.tamanho > 1024*1024 ? (f.tamanho/1024/1024).toFixed(1)+'MB' : Math.round(f.tamanho/1024)+'KB') : '';
-      return `<div class="foto-thumb" title="${f.nome_original}">
-        ${isImg
-          ? `<img src="${url}" onclick="verFoto('${url}')" loading="lazy">`
-          : `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:6px;gap:2px;">
-               <div style="font-size:12px;font-weight:700;color:var(--accent);">${f.nome_original.split('.').pop().toUpperCase()}</div>
-               <div style="font-size:10px;color:var(--text2);text-align:center;word-break:break-all;">${f.nome_original.length>14?f.nome_original.slice(0,12)+'…':f.nome_original}</div>
-               <div style="font-size:10px;color:var(--text3);">${tamanho}</div>
-             </div>`}
-        <button class="foto-del" onclick="deletarFoto(${f.id},${ticketId})" title="Remover">×</button>
-      </div>`;
-    }).join('');
-
-    // Mostra contador de fotos
-    const msgEl = document.getElementById(`fotos-msg-${ticketId}`);
-    if (msgEl) msgEl.textContent = `${fotos.length} anexo(s) · clique numa imagem para ampliar`;
-  } catch(e) { console.error('Fotos:', e.message); }
-}
-
-function triggerFotoUpload(ticketId) {
-  const el = document.getElementById('foto-input-' + ticketId);
-  if (el) el.click();
-}
-
-async function uploadFotos(ticketId, input) {
-  const msg = document.getElementById(`fotos-msg-${ticketId}`);
-  if (!input.files.length) return;
-  if (msg) msg.textContent = `Enviando ${input.files.length} arquivo(s)...`;
-  const formData = new FormData();
-  for (const f of input.files) formData.append('fotos', f);
-  try {
-    const res = await fetch(`/api/tickets/${ticketId}/fotos`, {
-      method:'POST',
-      headers:{ 'Authorization':'Bearer '+token, 'x-predio-id': String(predioAtivo.id) },
-      body: formData,
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.erro||'Erro');
-    if (msg) msg.textContent='';
-    input.value='';
-    await carregarFotos(ticketId);
-    showToast(`${data.length} foto(s) enviada(s)`);
-  } catch(e) { if (msg) msg.textContent='Erro: '+e.message; }
-}
-
-function verFoto(url) {
-  const ov = document.createElement('div');
-  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
-  ov.innerHTML=`<img src="${url}" style="max-width:95vw;max-height:95vh;object-fit:contain;border-radius:8px;">`;
-  ov.onclick=()=>ov.remove();
-  document.body.appendChild(ov);
-}
-
-async function deletarFoto(fotoId, ticketId) {
-  if (!confirm('Remover esta foto?')) return;
-  try {
-    await DEL(`/api/fotos/${fotoId}`);
-    await carregarFotos(ticketId);
-    showToast('Foto removida');
-  } catch(e) { showToast('Erro: '+e.message); }
-}
-
-// ════════════════════════════════════════════════
-// BUSCA E FILTROS
-// ════════════════════════════════════════════════
-let searchTimer = null;
-
-function toggleFilterPanel() {
-  const panel = document.getElementById('filter-panel');
-  const btn   = document.getElementById('filter-toggle-btn');
-  panel.classList.toggle('open');
-  btn.classList.toggle('active');
-  // Popula select de responsável nos filtros
-  const respEl = document.getElementById('f-resp');
-  if (respEl && membersList.length) {
-    respEl.innerHTML = '<option value="">Todos</option>' +
-      membersList.map(m => `<option value="${m.id}">${m.nome}</option>`).join('');
-  }
-}
-
-function limparFiltros() {
-  ['f-status','f-prio','f-cat','f-resp','f-de','f-ate'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-  const s = document.getElementById('search-input');
-  if (s) s.value = '';
-  buscarTickets();
-}
-
-async function buscarTickets() {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(async () => {
-    const q    = document.getElementById('search-input')?.value.trim() || '';
-    const status = document.getElementById('f-status')?.value || '';
-    const prio   = document.getElementById('f-prio')?.value || '';
-    const cat    = document.getElementById('f-cat')?.value || '';
-    const resp   = document.getElementById('f-resp')?.value || '';
-    const de     = document.getElementById('f-de')?.value || '';
-    const ate    = document.getElementById('f-ate')?.value || '';
-
-    const params = new URLSearchParams();
-    if (q)      params.set('q', q);
-    if (status) params.set('status', status);
-    if (prio)   params.set('prioridade', prio);
-    if (cat)    params.set('categoria', cat);
-    if (resp)   params.set('responsavel_id', resp);
-    if (de)     params.set('de', de);
-    if (ate)    params.set('ate', ate);
-
-    document.getElementById('ticket-list').innerHTML = '<div class="loader">Buscando...</div>';
-    try {
-      const url = params.toString() ? `/api/tickets?${params}` : '/api/tickets';
-      const results = await GET(url);
-      document.getElementById('ticket-list').innerHTML = results.length
-        ? results.map(ticketCard).join('')
-        : emptyState('Nenhum ticket encontrado com esses filtros.');
-    } catch(e) {
-      document.getElementById('ticket-list').innerHTML = emptyState('Erro na busca.');
-    }
-  }, 300); // debounce 300ms
-}
-
-// ════════════════════════════════════════════════
-// TROCAR SENHA
-// ════════════════════════════════════════════════
-function mostrarTrocaSenha(isPrimeiroLogin = false) {
-  document.getElementById('change-pass-sub').textContent = isPrimeiroLogin
-    ? 'Por segurança, você precisa criar uma nova senha antes de continuar.'
-    : 'Defina uma nova senha para sua conta.';
-  document.getElementById('change-pass-atual-field').style.display = isPrimeiroLogin ? 'none' : 'block';
-  document.getElementById('cp-nova').value = '';
-  document.getElementById('cp-confirma').value = '';
-  document.getElementById('cp-msg').textContent = '';
-  document.getElementById('overlay-change-pass').classList.add('open');
-}
-
-async function trocarSenha() {
-  const atual    = document.getElementById('cp-atual')?.value || '';
-  const nova     = document.getElementById('cp-nova').value;
-  const confirma = document.getElementById('cp-confirma').value;
-  const msg      = document.getElementById('cp-msg');
-
-  if (!nova || nova.length < 6) { msg.className='msg-error'; msg.textContent='Mínimo 6 caracteres.'; return; }
-  if (nova !== confirma) { msg.className='msg-error'; msg.textContent='As senhas não coincidem.'; return; }
-
-  msg.textContent = 'Salvando...'; msg.className = '';
-  try {
-    await POST('/api/auth/change-password', { senha_atual: atual, senha_nova: nova });
-    msg.className = 'msg-ok'; msg.textContent = '✓ Senha alterada!';
-    setTimeout(() => {
-      document.getElementById('overlay-change-pass').classList.remove('open');
-      showToast('Senha atualizada com sucesso!');
-    }, 1200);
-  } catch(e) { msg.className='msg-error'; msg.textContent=e.message; }
-}
-
-// ════════════════════════════════════════════════
-// PRÉDIOS (superadmin)
-// ════════════════════════════════════════════════
-function openAddPredio(){
-  ['np-nome','np-slug'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('np-msg').textContent='';
-  document.getElementById('overlay-predio-novo').classList.add('open');
-}
-// Auto-gera slug a partir do nome
-// ════════════════════════════════════════════════
-// FOTOS NO FORM DE NOVO TICKET
-// ════════════════════════════════════════════════
-let nFotosFiles = [];
-
-function renderNFotosPreview() {
-  const preview = document.getElementById('n-fotos-preview');
-  const countEl = document.getElementById('n-fotos-count');
-  if (!preview) return;
-  if (countEl) countEl.textContent = nFotosFiles.length + '/10';
-  preview.innerHTML = nFotosFiles.map((f, i) => {
-    const isImg = f.type.startsWith('image/');
-    const ext = f.name.split('.').pop().toUpperCase();
-    const name = f.name.length > 12 ? f.name.slice(0,10)+'…' : f.name;
-    if (isImg) {
-      const url = URL.createObjectURL(f);
-      return `<div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--surface2);border:1px solid var(--border);">
-        <img src="${url}" style="width:100%;height:100%;object-fit:cover;">
-        <button onclick="removerNFoto(${i})" style="position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.6);border:none;color:#fff;font-size:13px;cursor:pointer;line-height:1;">×</button>
-      </div>`;
-    } else {
-      return `<div style="position:relative;aspect-ratio:1;border-radius:8px;background:var(--surface2);border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px;gap:3px;text-align:center;">
-        <div style="font-size:12px;font-weight:700;color:var(--accent);">${ext}</div>
-        <div style="font-size:10px;color:var(--text2);word-break:break-all;">${name}</div>
-        <button onclick="removerNFoto(${i})" style="position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.12);border:none;color:var(--text);font-size:13px;cursor:pointer;line-height:1;">×</button>
-      </div>`;
-    }
-  }).join('');
-}
-
-function removerNFoto(idx) {
-  nFotosFiles.splice(idx, 1);
-  renderNFotosPreview();
-}
-
-document.addEventListener('DOMContentLoaded',()=>{
-  const nomeEl=document.getElementById('np-nome');
-  const slugEl=document.getElementById('np-slug');
-  if(nomeEl&&slugEl){
-    nomeEl.addEventListener('input',()=>{
-      slugEl.value=nomeEl.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
-    });
-  }
-  // Listener para acumular fotos no form de novo ticket
-  const fotosInput = document.getElementById('n-fotos');
-  if (fotosInput) {
-    fotosInput.addEventListener('change', () => {
-      [...fotosInput.files].forEach(f => {
-        if (nFotosFiles.length < 10 && !nFotosFiles.find(x => x.name===f.name && x.size===f.size)) {
-          nFotosFiles.push(f);
-        }
-      });
-      renderNFotosPreview();
-    });
+    if (e.code==='23505') return res.status(409).json({ erro: 'Slug já existe' });
+    res.status(500).json({ erro: 'Erro interno' });
   }
 });
-async function criarPredio(){
-  const nome=document.getElementById('np-nome').value.trim();
-  const slug=document.getElementById('np-slug').value.trim();
-  const msg=document.getElementById('np-msg');
-  if(!nome||!slug){msg.className='msg-error';msg.textContent='Nome e slug obrigatórios.';return;}
-  try{
-    const p=await POST('/api/predios',{nome,slug});
-    allPredios.push(p);
-    currentUser.predios.push(p); // adiciona à lista de seleção
-    renderPrediosList();
-    msg.className='msg-ok';msg.textContent=`✓ Prédio "${nome}" criado!`;
-    setTimeout(()=>closeOverlayById('overlay-predio-novo'),1600);
-    showToast('Prédio criado');
-  }catch(e){msg.className='msg-error';msg.textContent=e.message;}
-}
-function renderPrediosList(){
-  const el=document.getElementById('predios-list');
-  if(!el) return;
-  if(!allPredios.length){el.innerHTML=emptyState('Nenhum prédio cadastrado.');return;}
-  el.innerHTML=allPredios.map(p=>`
-    <div class="predio-admin-card">
-      <div>
-        <div class="predio-admin-nome">${p.nome}</div>
-        <div class="predio-admin-slug">${p.slug}</div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <span class="badge ${p.ativo?'badge-resolvido':'badge-andamento'}">${p.ativo?'Ativo':'Inativo'}</span>
-        ${p.id!==predioAtivo.id?`<button class="btn btn-ghost btn-sm" onclick="selecionarPredio(${p.id},'${encodeURIComponent(p.nome)}','${p.slug}')">Ir →</button>`:'<span style="font-size:12px;color:var(--text2);">atual</span>'}
-      </div>
-    </div>`).join('');
+
+app.patch('/api/predios/:id', auth, superOnly, async (req, res) => {
+  const { nome, ativo } = req.body;
+  const { rows } = await pool.query(
+    'UPDATE predios SET nome=COALESCE($1,nome), ativo=COALESCE($2,ativo) WHERE id=$3 RETURNING *',
+    [nome||null, ativo!=null?ativo:null, req.params.id]
+  );
+  res.json(rows[0]);
+});
+
+// ══════════════════════════════════════════════════════════════
+// USUÁRIOS
+// ══════════════════════════════════════════════════════════════
+
+app.get('/api/usuarios', auth, async (req, res) => {
+  const pid = parseInt(req.headers['x-predio-id']);
+  const isAdmin = ['superadmin','admin'].includes(req.user.role);
+  try {
+    let rows;
+    if (pid) {
+      if (isAdmin) {
+        ({ rows } = await pool.query(
+          `SELECT u.id,u.nome,u.email,u.cargo,u.role,u.ativo FROM usuarios u JOIN usuario_predios up ON up.usuario_id=u.id WHERE up.predio_id=$1 ORDER BY u.nome`,
+          [pid]
+        ));
+      } else {
+        ({ rows } = await pool.query(
+          `SELECT u.id,u.nome,u.cargo FROM usuarios u JOIN usuario_predios up ON up.usuario_id=u.id WHERE up.predio_id=$1 AND u.ativo=TRUE ORDER BY u.nome`,
+          [pid]
+        ));
+      }
+    } else {
+      if (!isAdmin) return res.status(403).json({ erro: 'Acesso negado' });
+      ({ rows } = await pool.query('SELECT id,nome,email,cargo,role,ativo FROM usuarios ORDER BY nome'));
+    }
+    res.json(rows);
+  } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
+});
+
+app.post('/api/usuarios', auth, adminOnly, async (req, res) => {
+  const { nome, email, senha, cargo, role, predio_ids } = req.body;
+  if (!nome||!email||!senha) return res.status(400).json({ erro: 'Nome, e-mail e senha obrigatórios' });
+  if (senha.length < 6) return res.status(400).json({ erro: 'Senha mínimo 6 caracteres' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const hash = await bcrypt.hash(senha, 10);
+    const { rows } = await client.query(
+      'INSERT INTO usuarios (nome,email,senha_hash,cargo,role,must_change_password) VALUES ($1,$2,$3,$4,$5,TRUE) RETURNING id,nome,email,cargo,role',
+      [nome, email.toLowerCase().trim(), hash, cargo||null, role||'membro']
+    );
+    const u = rows[0];
+    for (const pid of (predio_ids||[])) {
+      await client.query('INSERT INTO usuario_predios (usuario_id,predio_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [u.id, pid]);
+    }
+    await client.query('COMMIT');
+
+    // Busca nomes dos prédios para o e-mail
+    let predioNomes = [];
+    if (predio_ids && predio_ids.length) {
+      const { rows: ps } = await pool.query('SELECT nome FROM predios WHERE id = ANY($1)', [predio_ids]);
+      predioNomes = ps.map(p => p.nome);
+    }
+    // Envia e-mail de boas-vindas
+    enviarEmail(emailBoasVindas({ nome, email: email.toLowerCase().trim(), senha, predios: predioNomes, role: role||'membro' }));
+
+    res.status(201).json(u);
+  } catch(e) {
+    await client.query('ROLLBACK');
+    if (e.code==='23505') return res.status(409).json({ erro: 'E-mail já cadastrado' });
+    res.status(500).json({ erro: 'Erro interno' });
+  } finally { client.release(); }
+});
+
+app.delete('/api/usuarios/:id', auth, adminOnly, async (req, res) => {
+  if (parseInt(req.params.id)===req.user.id) return res.status(400).json({ erro: 'Não pode remover a si mesmo' });
+  await pool.query('UPDATE usuarios SET ativo=FALSE WHERE id=$1', [req.params.id]);
+  res.json({ ok: true });
+});
+
+// ══════════════════════════════════════════════════════════════
+// TICKETS
+// ══════════════════════════════════════════════════════════════
+
+app.get('/api/tickets', auth, comPredio, async (req, res) => {
+  try {
+    // Filtros de busca
+    const { q, status, prioridade, categoria, responsavel_id, de, ate } = req.query;
+    let query = 'SELECT * FROM tickets WHERE predio_id=$1';
+    const params = [req.predio_id];
+
+    if (status)         { params.push(status);         query += ` AND status=$${params.length}`; }
+    if (prioridade)     { params.push(prioridade);     query += ` AND prioridade=$${params.length}`; }
+    if (categoria)      { params.push(categoria);      query += ` AND categoria=$${params.length}`; }
+    if (responsavel_id) { params.push(parseInt(responsavel_id)); query += ` AND responsavel_id=$${params.length}`; }
+    if (de)             { params.push(de);             query += ` AND criado_em::date>=$${params.length}`; }
+    if (ate)            { params.push(ate);            query += ` AND criado_em::date<=$${params.length}`; }
+    if (q)              { params.push(`%${q}%`);       query += ` AND (titulo ILIKE $${params.length} OR descricao ILIKE $${params.length} OR local ILIKE $${params.length})`; }
+
+    query += ' ORDER BY criado_em DESC';
+    const { rows } = await pool.query(query, params);
+    res.json(rows);
+  } catch(e) { console.error(e); res.status(500).json({ erro: 'Erro interno' }); }
+});
+
+app.post('/api/tickets', auth, comPredio, async (req, res) => {
+  const { titulo, descricao, categoria, local, origem, prioridade, prazo, responsavel_id } = req.body;
+  if (!titulo||!categoria||!origem) return res.status(400).json({ erro: 'Título, categoria e origem obrigatórios' });
+  try {
+    let responsavel_nome=null, responsavel_email=null;
+    if (responsavel_id) {
+      const { rows } = await pool.query('SELECT nome,email FROM usuarios WHERE id=$1', [responsavel_id]);
+      responsavel_nome=rows[0]?.nome||null; responsavel_email=rows[0]?.email||null;
+    }
+    const { rows } = await pool.query(
+      `INSERT INTO tickets (predio_id,titulo,descricao,categoria,local,origem,prioridade,status,autor_id,autor_nome,responsavel_id,responsavel_nome,prazo)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'aberto',$8,$9,$10,$11,$12) RETURNING *`,
+      [req.predio_id,titulo,descricao||null,categoria,local||null,origem,prioridade||'Média',req.user.id,req.user.nome,responsavel_id||null,responsavel_nome,prazo||null]
+    );
+    const t = rows[0];
+    await pool.query('INSERT INTO ticket_historico (ticket_id,mensagem,autor_id,autor_nome) VALUES ($1,$2,$3,$4)',
+      [t.id,`Aberto por ${req.user.nome} via ${origem}`,req.user.id,req.user.nome]);
+    enviarEmail(emailTicketAberto(t, req.user.email));
+    if (responsavel_email && responsavel_email!==req.user.email)
+      enviarEmail({...emailTicketAberto(t, responsavel_email), subject:`[JFL] Ticket #${t.id} atribuído a você`});
+    res.status(201).json(t);
+  } catch(e) { console.error(e); res.status(500).json({ erro: 'Erro interno' }); }
+});
+
+app.patch('/api/tickets/:id/status', auth, comPredio, async (req, res) => {
+  const { status } = req.body;
+  const validos = ['aberto','em andamento','feedback ao cliente','resolvido'];
+  if (!validos.includes(status)) return res.status(400).json({ erro: 'Status inválido' });
+  const { rows } = await pool.query(
+    'UPDATE tickets SET status=$1,atualizado_em=NOW() WHERE id=$2 AND predio_id=$3 RETURNING *',
+    [status,req.params.id,req.predio_id]
+  );
+  if (!rows[0]) return res.status(404).json({ erro: 'Não encontrado' });
+  const t = rows[0];
+  await pool.query('INSERT INTO ticket_historico (ticket_id,mensagem,autor_id,autor_nome) VALUES ($1,$2,$3,$4)',
+    [req.params.id,`Status → ${status}`,req.user.id,req.user.nome]);
+  if (t.responsavel_id && t.responsavel_id!==req.user.id) {
+    const { rows: ru } = await pool.query('SELECT email FROM usuarios WHERE id=$1',[t.responsavel_id]);
+    if (ru[0]?.email) enviarEmail(emailStatusAtualizado(t,status,req.user.nome,ru[0].email));
+  }
+  res.json(t);
+});
+
+// ══════════════════════════════════════════════════════════════
+// HISTÓRICO
+// ══════════════════════════════════════════════════════════════
+
+app.get('/api/tickets/:id/historico', auth, comPredio, async (req, res) => {
+  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',[req.params.id,req.predio_id]);
+  if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
+  const { rows } = await pool.query('SELECT * FROM ticket_historico WHERE ticket_id=$1 ORDER BY criado_em DESC',[req.params.id]);
+  res.json(rows);
+});
+
+app.post('/api/tickets/:id/historico', auth, comPredio, async (req, res) => {
+  const { mensagem } = req.body;
+  if (!mensagem) return res.status(400).json({ erro: 'Mensagem obrigatória' });
+  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',[req.params.id,req.predio_id]);
+  if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
+  const { rows } = await pool.query(
+    'INSERT INTO ticket_historico (ticket_id,mensagem,autor_id,autor_nome) VALUES ($1,$2,$3,$4) RETURNING *',
+    [req.params.id,mensagem,req.user.id,req.user.nome]
+  );
+  await pool.query('UPDATE tickets SET atualizado_em=NOW() WHERE id=$1',[req.params.id]);
+  res.status(201).json(rows[0]);
+});
+
+// ══════════════════════════════════════════════════════════════
+// ATIVIDADES
+// ══════════════════════════════════════════════════════════════
+
+app.get('/api/tickets/:id/atividades', auth, comPredio, async (req, res) => {
+  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',[req.params.id,req.predio_id]);
+  if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
+  const { rows } = await pool.query('SELECT * FROM ticket_atividades WHERE ticket_id=$1 ORDER BY criado_em ASC',[req.params.id]);
+  res.json(rows);
+});
+
+app.post('/api/tickets/:id/atividades', auth, comPredio, async (req, res) => {
+  const { titulo, responsavel_nome, prazo } = req.body;
+  if (!titulo) return res.status(400).json({ erro: 'Título obrigatório' });
+  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',[req.params.id,req.predio_id]);
+  if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
+  const { rows } = await pool.query(
+    'INSERT INTO ticket_atividades (ticket_id,titulo,responsavel_nome,prazo,criado_por) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+    [req.params.id,titulo,responsavel_nome||null,prazo||null,req.user.nome]
+  );
+  res.status(201).json(rows[0]);
+});
+
+app.patch('/api/atividades/:id/toggle', auth, async (req, res) => {
+  const { rows } = await pool.query(
+    `UPDATE ticket_atividades SET status=CASE WHEN status='concluida' THEN 'pendente' ELSE 'concluida' END WHERE id=$1 RETURNING *`,
+    [req.params.id]
+  );
+  if (!rows[0]) return res.status(404).json({ erro: 'Não encontrado' });
+  res.json(rows[0]);
+});
+
+// ══════════════════════════════════════════════════════════════
+// FOTOS
+// ══════════════════════════════════════════════════════════════
+
+app.post('/api/tickets/:id/fotos', auth, comPredio, upload.array('fotos',10), async (req, res) => {
+  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',[req.params.id,req.predio_id]);
+  if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
+  if (!req.files||!req.files.length) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
+  const inseridas = [];
+  for (const f of req.files) {
+    const { rows } = await pool.query(
+      'INSERT INTO ticket_fotos (ticket_id,nome_original,nome_arquivo,tamanho,mime_type,enviado_por) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [req.params.id,f.originalname,f.filename,f.size,f.mimetype,req.user.nome]
+    );
+    inseridas.push(rows[0]);
+  }
+  await pool.query('INSERT INTO ticket_historico (ticket_id,mensagem,autor_id,autor_nome) VALUES ($1,$2,$3,$4)',
+    [req.params.id,`${req.files.length} foto(s) anexada(s) por ${req.user.nome}`,req.user.id,req.user.nome]);
+  res.status(201).json(inseridas);
+});
+
+app.get('/api/tickets/:id/fotos', auth, comPredio, async (req, res) => {
+  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',[req.params.id,req.predio_id]);
+  if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
+  const { rows } = await pool.query('SELECT * FROM ticket_fotos WHERE ticket_id=$1 ORDER BY criado_em ASC',[req.params.id]);
+  res.json(rows);
+});
+
+app.delete('/api/fotos/:id', auth, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM ticket_fotos WHERE id=$1',[req.params.id]);
+  if (!rows[0]) return res.status(404).json({ erro: 'Não encontrado' });
+  const filePath = path.join(UPLOAD_DIR, rows[0].nome_arquivo);
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  await pool.query('DELETE FROM ticket_fotos WHERE id=$1',[req.params.id]);
+  res.json({ ok: true });
+});
+
+// ══════════════════════════════════════════════════════════════
+// RELATÓRIOS
+// ══════════════════════════════════════════════════════════════
+
+async function buscarTicketsRelatorio(predio_id, { status, prioridade, de, ate }={}) {
+  let q='SELECT * FROM tickets WHERE predio_id=$1';
+  const params=[predio_id];
+  if (status)     { params.push(status);     q+=` AND status=$${params.length}`; }
+  if (prioridade) { params.push(prioridade); q+=` AND prioridade=$${params.length}`; }
+  if (de)         { params.push(de);         q+=` AND criado_em::date>=$${params.length}`; }
+  if (ate)        { params.push(ate);        q+=` AND criado_em::date<=$${params.length}`; }
+  q+=' ORDER BY criado_em DESC';
+  const { rows } = await pool.query(q,params);
+  return rows;
 }
 
-// ════════════════════════════════════════════════
-// NAV
-// ════════════════════════════════════════════════
-function showScreen(name,el){
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  document.getElementById('screen-'+name).classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  document.querySelectorAll('[data-tab]').forEach(t=>t.classList.remove('active'));
-  if(el){el.classList.add('active');}
-  if(name==='dashboard')  renderDashboard();
-  if(name==='tickets')    renderList();
-  if(name==='team')       renderTeam();
-  if(name==='predios')    renderPrediosList();
-  if(name==='relatorios') { /* static screen */ }
+app.get('/api/relatorios/excel', auth, comPredio, async (req, res) => {
+  try {
+    const tickets = await buscarTicketsRelatorio(req.predio_id, req.query);
+    const { rows: predioRows } = await pool.query('SELECT nome FROM predios WHERE id=$1',[req.predio_id]);
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Operação JFL Inc';
+    const ws = wb.addWorksheet('Tickets');
+    ws.columns = [
+      {header:'ID',key:'id',width:8},{header:'Título',key:'titulo',width:40},
+      {header:'Status',key:'status',width:20},{header:'Prioridade',key:'prioridade',width:14},
+      {header:'Categoria',key:'categoria',width:22},{header:'Local',key:'local',width:20},
+      {header:'Origem',key:'origem',width:18},{header:'Responsável',key:'responsavel_nome',width:22},
+      {header:'Aberto por',key:'autor_nome',width:22},{header:'Prazo',key:'prazo',width:14},
+      {header:'Criado em',key:'criado_em',width:20},{header:'Descrição',key:'descricao',width:50},
+    ];
+    ws.getRow(1).eachCell(cell => {
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1A1917'}};
+      cell.font={color:{argb:'FFFFFFFF'},bold:true,size:11};
+    });
+    const statusColors={'aberto':'FFEBF0F9','em andamento':'FFFDF5E6','resolvido':'FFEBF5EE','feedback ao cliente':'FFF3EBFA'};
+    tickets.forEach(t => {
+      const row = ws.addRow({...t,
+        prazo:t.prazo?new Date(t.prazo).toLocaleDateString('pt-BR'):'—',
+        criado_em:t.criado_em?new Date(t.criado_em).toLocaleString('pt-BR'):'—',
+        descricao:t.descricao||'—', responsavel_nome:t.responsavel_nome||'A definir',
+      });
+      const bg=statusColors[t.status]||'FFFFFFFF';
+      row.eachCell(cell=>{ cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:bg}}; cell.alignment={wrapText:true,vertical:'top'}; });
+    });
+    ws.autoFilter={from:'A1',to:'L1'};
+    const wsSumario=wb.addWorksheet('Resumo');
+    wsSumario.addRow(['Relatório — '+(predioRows[0]?.nome||'')]);
+    wsSumario.addRow(['Gerado em',new Date().toLocaleString('pt-BR')]);
+    wsSumario.addRow([]);
+    wsSumario.addRow(['Indicador','Qtd']);
+    wsSumario.addRow(['Total',tickets.length]);
+    wsSumario.addRow(['Em aberto',tickets.filter(t=>t.status==='aberto').length]);
+    wsSumario.addRow(['Em andamento',tickets.filter(t=>t.status==='em andamento').length]);
+    wsSumario.addRow(['Resolvidos',tickets.filter(t=>t.status==='resolvido').length]);
+    wsSumario.addRow(['Alta prioridade',tickets.filter(t=>t.prioridade==='Alta').length]);
+    res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition',`attachment; filename="tickets-${Date.now()}.xlsx"`);
+    await wb.xlsx.write(res); res.end();
+  } catch(e) { console.error(e); res.status(500).json({erro:'Erro ao gerar Excel'}); }
+});
+
+app.get('/api/relatorios/pdf', auth, comPredio, async (req, res) => {
+  try {
+    const tickets = await buscarTicketsRelatorio(req.predio_id, req.query);
+    const { rows: predioRows } = await pool.query('SELECT nome FROM predios WHERE id=$1',[req.predio_id]);
+    const predioNome = predioRows[0]?.nome||'Prédio';
+    const doc = new PDFDocument({margin:40,size:'A4'});
+    res.setHeader('Content-Type','application/pdf');
+    res.setHeader('Content-Disposition',`attachment; filename="tickets-${Date.now()}.pdf"`);
+    doc.pipe(res);
+    doc.rect(0,0,doc.page.width,70).fill('#1A1917');
+    doc.fillColor('#ffffff').fontSize(18).font('Helvetica-Bold').text('Operação JFL Inc',40,20);
+    doc.fontSize(11).font('Helvetica').text(`Relatório — ${predioNome}`,40,44);
+    doc.fillColor('#1A1917').moveDown(2);
+    doc.fontSize(10).fillColor('#6B6860').text(`Gerado em: ${new Date().toLocaleString('pt-BR')}   |   Total: ${tickets.length}`,{align:'right'});
+    doc.moveDown(0.5);
+    const statusColors2={aberto:'#EBF0F9','em andamento':'#FDF5E6',resolvido:'#EBF5EE','feedback ao cliente':'#F3EBFA'};
+    const prioColors={Alta:'#C0392B',Média:'#92590A',Baixa:'#1E6B3C'};
+    tickets.forEach(t=>{
+      if(doc.y>doc.page.height-140) doc.addPage();
+      const cardY=doc.y; const cardH=t.descricao?100:72;
+      doc.rect(40,cardY,doc.page.width-80,cardH).fill(statusColors2[t.status]||'#F9F9F7').stroke('#E2DED6');
+      doc.fillColor('#A09D98').fontSize(9).font('Helvetica').text(`#${t.id}`,52,cardY+10);
+      doc.fillColor('#1A1917').fontSize(11).font('Helvetica-Bold').text(t.titulo,52,cardY+22,{width:doc.page.width-160});
+      const tagX=doc.page.width-160;
+      doc.fontSize(9).fillColor(prioColors[t.prioridade]||'#1A1917').text(`● ${t.prioridade}`,tagX,cardY+10,{width:110,align:'right'});
+      doc.fillColor('#6B6860').text(t.status,tagX,cardY+22,{width:110,align:'right'});
+      const meta=[t.categoria,t.local,t.responsavel_nome||'A definir',t.prazo?new Date(t.prazo).toLocaleDateString('pt-BR'):''].filter(Boolean).join('  ·  ');
+      doc.font('Helvetica').fontSize(9).fillColor('#6B6860').text(meta,52,cardY+42,{width:doc.page.width-110});
+      if(t.descricao) doc.fontSize(9).fillColor('#1A1917').text(t.descricao,52,cardY+58,{width:doc.page.width-110,ellipsis:true,height:28});
+      doc.moveDown(0.3);
+    });
+    if(!tickets.length) doc.moveDown(2).fontSize(13).fillColor('#A09D98').text('Nenhum ticket encontrado.',{align:'center'});
+    doc.end();
+  } catch(e) { console.error(e); res.status(500).json({erro:'Erro ao gerar PDF'}); }
+});
+
+// ══════════════════════════════════════════════════════════════
+// STATS
+// ══════════════════════════════════════════════════════════════
+
+app.get('/api/stats', auth, comPredio, async (req, res) => {
+  const pid=req.predio_id;
+  const hoje=new Date().toISOString().split('T')[0];
+  const [a,b,c,d]=await Promise.all([
+    pool.query(`SELECT COUNT(*) FROM tickets WHERE predio_id=$1 AND status='aberto'`,[pid]),
+    pool.query(`SELECT COUNT(*) FROM tickets WHERE predio_id=$1 AND status='em andamento'`,[pid]),
+    pool.query(`SELECT COUNT(*) FROM tickets WHERE predio_id=$1 AND status='resolvido'`,[pid]),
+    pool.query(`SELECT COUNT(*) FROM tickets WHERE predio_id=$1 AND prazo::date=$2 AND status!='resolvido'`,[pid,hoje]),
+  ]);
+  res.json({aberto:parseInt(a.rows[0].count),andamento:parseInt(b.rows[0].count),resolvido:parseInt(c.rows[0].count),hoje:parseInt(d.rows[0].count)});
+});
+
+// ── SPA FALLBACK ──────────────────────────────────────────────
+app.get('*',(_, res)=>res.sendFile(path.join(__dirname,'public/index.html')));
+
+// ══════════════════════════════════════════════════════════════
+// JOB: NOTIFICAÇÃO DE PRAZO
+// ══════════════════════════════════════════════════════════════
+
+async function jobNotificacoesPrazo() {
+  if (!process.env.SMTP_USER) return;
+  const hoje=new Date().toISOString().split('T')[0];
+  const amanha=new Date(Date.now()+24*60*60*1000).toISOString().split('T')[0];
+  try {
+    const {rows:vencAmanha}=await pool.query(`
+      SELECT t.*,p.nome as predio_nome,u.email as resp_email FROM tickets t
+      JOIN predios p ON p.id=t.predio_id LEFT JOIN usuarios u ON u.id=t.responsavel_id
+      WHERE t.prazo::date=$1 AND t.status NOT IN ('resolvido') AND t.responsavel_id IS NOT NULL`,[amanha]);
+    for(const t of vencAmanha) if(t.resp_email) await enviarEmail(emailPrazoVencendo(t,t.predio_nome,t.resp_email));
+    const {rows:atrasados}=await pool.query(`
+      SELECT t.*,p.nome as predio_nome,u.email as resp_email FROM tickets t
+      JOIN predios p ON p.id=t.predio_id LEFT JOIN usuarios u ON u.id=t.responsavel_id
+      WHERE t.prazo::date=$1 AND t.status NOT IN ('resolvido') AND t.responsavel_id IS NOT NULL`,[hoje]);
+    for(const t of atrasados) if(t.resp_email) await enviarEmail(emailPrazoAtrasado(t,t.predio_nome,t.resp_email));
+    console.log(`[JOB] Prazos: ${vencAmanha.length} vencendo amanhã, ${atrasados.length} atrasados`);
+  } catch(e) { console.error('[JOB] Erro:',e.message); }
 }
-function showPage(name){
-  document.getElementById('page-login').classList.remove('active');
-  document.getElementById('page-predio').classList.remove('active');
-  document.getElementById('app').style.display='none';
-  if(name==='login')   document.getElementById('page-login').classList.add('active');
-  if(name==='predio')  document.getElementById('page-predio').classList.add('active');
-  if(name==='app')     document.getElementById('app').style.display='block';
+
+function agendarJobPrazo() {
+  const agora=new Date();
+  const proximas8h=new Date();
+  proximas8h.setUTCHours(11,0,0,0);
+  if(proximas8h<=agora) proximas8h.setDate(proximas8h.getDate()+1);
+  const ms=proximas8h-agora;
+  console.log(`[JOB] Próxima notificação em ${Math.round(ms/1000/60)} min`);
+  setTimeout(()=>{ jobNotificacoesPrazo(); setInterval(jobNotificacoesPrazo,24*60*60*1000); },ms);
 }
-function closeOverlay(id,e){ if(e.target===document.getElementById(id)) document.getElementById(id).classList.remove('open'); }
-function closeOverlayById(id){ document.getElementById(id).classList.remove('open'); }
-function showToast(msg){
-  const t=document.getElementById('toast');
-  t.textContent=msg;t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2400);
+
+// ══════════════════════════════════════════════════════════════
+// AUTO-MIGRATE
+// ══════════════════════════════════════════════════════════════
+async function migrate() {
+  const client=await pool.connect();
+  try {
+    console.log('🔄 Verificando banco de dados...');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS predios (
+        id SERIAL PRIMARY KEY, nome TEXT NOT NULL, slug TEXT NOT NULL UNIQUE,
+        ativo BOOLEAN DEFAULT TRUE, criado_em TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS usuarios (
+        id SERIAL PRIMARY KEY, nome TEXT NOT NULL, email TEXT NOT NULL UNIQUE,
+        senha_hash TEXT NOT NULL, cargo TEXT,
+        role TEXT NOT NULL DEFAULT 'membro' CHECK (role IN ('superadmin','admin','membro')),
+        ativo BOOLEAN DEFAULT TRUE,
+        must_change_password BOOLEAN DEFAULT FALSE,
+        criado_em TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS usuario_predios (
+        usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        predio_id  INTEGER NOT NULL REFERENCES predios(id)  ON DELETE CASCADE,
+        PRIMARY KEY (usuario_id, predio_id)
+      );
+      CREATE TABLE IF NOT EXISTS tickets (
+        id SERIAL PRIMARY KEY, predio_id INTEGER NOT NULL REFERENCES predios(id) ON DELETE CASCADE,
+        titulo TEXT NOT NULL, descricao TEXT, categoria TEXT, local TEXT, origem TEXT,
+        prioridade TEXT NOT NULL DEFAULT 'Média' CHECK (prioridade IN ('Baixa','Média','Alta')),
+        status TEXT NOT NULL DEFAULT 'aberto' CHECK (status IN ('aberto','em andamento','feedback ao cliente','resolvido')),
+        autor_id INTEGER REFERENCES usuarios(id), autor_nome TEXT,
+        responsavel_id INTEGER REFERENCES usuarios(id), responsavel_nome TEXT,
+        prazo DATE, criado_em TIMESTAMPTZ DEFAULT NOW(), atualizado_em TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS ticket_historico (
+        id SERIAL PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+        mensagem TEXT NOT NULL, autor_id INTEGER REFERENCES usuarios(id),
+        autor_nome TEXT, criado_em TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS ticket_atividades (
+        id SERIAL PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+        titulo TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente','concluida')),
+        responsavel_nome TEXT, prazo DATE, criado_por TEXT, criado_em TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS ticket_fotos (
+        id SERIAL PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+        nome_original TEXT NOT NULL, nome_arquivo TEXT NOT NULL UNIQUE,
+        tamanho INTEGER, mime_type TEXT, enviado_por TEXT, criado_em TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    // Adiciona must_change_password em usuários existentes se não existir
+    await client.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE`);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_tickets_predio_status ON tickets(predio_id,status);
+      CREATE INDEX IF NOT EXISTS idx_tickets_predio_prio   ON tickets(predio_id,prioridade);
+      CREATE INDEX IF NOT EXISTS idx_tickets_predio_prazo  ON tickets(predio_id,prazo);
+      CREATE INDEX IF NOT EXISTS idx_historico_ticket      ON ticket_historico(ticket_id);
+      CREATE INDEX IF NOT EXISTS idx_atividades_ticket     ON ticket_atividades(ticket_id);
+      CREATE INDEX IF NOT EXISTS idx_fotos_ticket          ON ticket_fotos(ticket_id);
+      CREATE INDEX IF NOT EXISTS idx_usuario_predios_uid   ON usuario_predios(usuario_id);
+      CREATE INDEX IF NOT EXISTS idx_usuario_predios_pid   ON usuario_predios(predio_id);
+    `);
+    const {rows:p}=await client.query("SELECT id FROM predios WHERE slug='jml'");
+    if(!p.length){await client.query("INSERT INTO predios(nome,slug) VALUES('JML','jml')");console.log('🏢 JML criado');}
+    const {rows:a}=await client.query("SELECT id FROM usuarios WHERE email='admin@operacao.com'");
+    if(!a.length){
+      const hash=await bcrypt.hash('admin123',10);
+      await client.query(`INSERT INTO usuarios(nome,email,senha_hash,cargo,role) VALUES('Administrador','admin@operacao.com',$1,'TI','superadmin')`,[hash]);
+      console.log('👤 Superadmin criado');
+    }
+    console.log('✅ Banco pronto');
+  } catch(e){console.error('❌ Migração:',e.message);throw e;}
+  finally{client.release();}
 }
-</script>
-</body>
-</html>
+
+migrate()
+  .then(()=>{
+    app.listen(PORT,()=>console.log(`🚀 Porta ${PORT}`));
+    agendarJobPrazo();
+  })
+  .catch(e=>{console.error('Falha fatal:',e.message);process.exit(1);});
