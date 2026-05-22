@@ -377,39 +377,81 @@ app.get('/api/usuarios', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
 });
 
+// Gera senha temporária aleatória
+function gerarSenhaTemp() {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  let senha = '';
+  for (let i = 0; i < 10; i++) senha += chars[Math.floor(Math.random() * chars.length)];
+  return senha;
+}
+
 app.post('/api/usuarios', auth, adminOnly, async (req, res) => {
-  const { nome, email, senha, cargo, role, predio_ids } = req.body;
-  if (!nome||!email||!senha) return res.status(400).json({ erro: 'Nome, e-mail e senha obrigatórios' });
-  if (senha.length < 6) return res.status(400).json({ erro: 'Senha mínimo 6 caracteres' });
+  const { email, role, predio_ids } = req.body;
+  if (!email) return res.status(400).json({ erro: 'E-mail obrigatório' });
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const hash = await bcrypt.hash(senha, 10);
+    const senhaTemp = gerarSenhaTemp();
+    const hash = await bcrypt.hash(senhaTemp, 10);
+    const emailLower = email.toLowerCase().trim();
+
     const { rows } = await client.query(
-      'INSERT INTO usuarios (nome,email,senha_hash,cargo,role,must_change_password) VALUES ($1,$2,$3,$4,$5,TRUE) RETURNING id,nome,email,cargo,role',
-      [nome, email.toLowerCase().trim(), hash, cargo||null, role||'membro']
+      `INSERT INTO usuarios (nome,email,senha_hash,cargo,role,must_change_password)
+       VALUES ($1,$2,$3,'','membro',TRUE)
+       ON CONFLICT (email) DO UPDATE
+         SET senha_hash=EXCLUDED.senha_hash, must_change_password=TRUE, ativo=TRUE, role=$4
+       RETURNING id,nome,email,cargo,role`,
+      [emailLower, emailLower, hash, role||'membro']
     );
     const u = rows[0];
+
+    // Vincula prédios
+    await client.query('DELETE FROM usuario_predios WHERE usuario_id=$1', [u.id]);
     for (const pid of (predio_ids||[])) {
       await client.query('INSERT INTO usuario_predios (usuario_id,predio_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [u.id, pid]);
     }
     await client.query('COMMIT');
 
-    // Busca nomes dos prédios para o e-mail
+    // Busca nomes dos prédios
     let predioNomes = [];
     if (predio_ids && predio_ids.length) {
       const { rows: ps } = await pool.query('SELECT nome FROM predios WHERE id = ANY($1)', [predio_ids]);
       predioNomes = ps.map(p => p.nome);
     }
-    // Envia e-mail de boas-vindas
-    enviarEmail(emailBoasVindas({ nome, email: email.toLowerCase().trim(), senha, predios: predioNomes, role: role||'membro' }));
 
-    res.status(201).json(u);
+    // Envia convite
+    enviarEmail(emailBoasVindas({ nome: emailLower, email: emailLower, senha: senhaTemp, predios: predioNomes, role: role||'membro' }));
+
+    res.status(201).json({ ...u, convite_enviado: true });
   } catch(e) {
     await client.query('ROLLBACK');
-    if (e.code==='23505') return res.status(409).json({ erro: 'E-mail já cadastrado' });
+    console.error(e);
     res.status(500).json({ erro: 'Erro interno' });
   } finally { client.release(); }
+});
+
+// POST /api/usuarios/:id/reenviar — reenviar convite com nova senha temp
+app.post('/api/usuarios/:id/reenviar', auth, adminOnly, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM usuarios WHERE id=$1', [req.params.id]);
+    if (!rows[0]) return res.status(404).json({ erro: 'Não encontrado' });
+    const u = rows[0];
+    const senhaTemp = gerarSenhaTemp();
+    const hash = await bcrypt.hash(senhaTemp, 10);
+    await pool.query('UPDATE usuarios SET senha_hash=$1, must_change_password=TRUE WHERE id=$2', [hash, u.id]);
+
+    // Busca prédios do usuário
+    const { rows: ps } = await pool.query(
+      `SELECT p.nome FROM predios p JOIN usuario_predios up ON up.predio_id=p.id WHERE up.usuario_id=$1`, [u.id]
+    );
+    const predioNomes = ps.map(p => p.nome);
+    enviarEmail(emailBoasVindas({ nome: u.nome||u.email, email: u.email, senha: senhaTemp, predios: predioNomes, role: u.role }));
+
+    res.json({ ok: true, mensagem: `Convite reenviado para ${u.email}` });
+  } catch(e) {
+    res.status(500).json({ erro: 'Erro interno' });
+  }
 });
 
 app.delete('/api/usuarios/:id', auth, adminOnly, async (req, res) => {
