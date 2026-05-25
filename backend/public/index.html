@@ -85,6 +85,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .predio-switcher svg{width:14px;height:14px;stroke:var(--text2);stroke-width:2;}
 .topbar-right{display:flex;align-items:center;gap:8px;}
 .topbar-user{font-size:12px;color:var(--text2);}
+.desktop-only{display:none;}
+@media(min-width:768px){.desktop-only{display:inline;}}
 
 @media(min-width:768px){
   .layout{display:flex;min-height:calc(100vh - 56px);}
@@ -287,12 +289,12 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     <div class="topbar-left">
       <div class="topbar-brand">⬡ JFL Inc</div>
       <button class="predio-switcher" onclick="showPredioSelector()" id="predio-switcher-btn">
-        <span id="predio-nome-ativo">—</span>
+        <span id="predio-nome-ativo" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 16l5-5 5 5"/><path d="M7 8l5 5 5-5" opacity=".4"/></svg>
       </button>
     </div>
     <div class="topbar-right">
-      <span class="topbar-user" id="app-user-label"></span>
+      <span class="topbar-user desktop-only" id="app-user-label"></span>
       <button class="btn btn-ghost btn-sm" onclick="showNewTicket()">+ Ticket</button>
     </div>
   </div>
@@ -518,20 +520,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
           </button>
         </div>
         <div id="rel-msg" style="margin-top:12px;font-size:13px;text-align:center;"></div>
-        <div class="divider"></div>
-        <div class="section-title">Notificações por e-mail</div>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;">
-          <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px;">
-            E-mails são enviados automaticamente quando um ticket é aberto ou tem o status atualizado. Configure o SMTP nas variáveis do Railway.
-          </div>
-          <div style="font-size:12px;background:var(--surface2);border-radius:var(--radius);padding:12px;font-family:var(--mono);line-height:2;color:var(--text2);">
-            SMTP_HOST=smtp.gmail.com<br>
-            SMTP_PORT=587<br>
-            SMTP_USER=seu@email.com<br>
-            SMTP_PASS=sua-senha-de-app<br>
-            SMTP_SECURE=false
-          </div>
-        </div>
+
       </div>
 
       <!-- PERFIL -->
