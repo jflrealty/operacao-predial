@@ -331,7 +331,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         Configurações
       </button>
-      <button class="nav-item" onclick="showPredioSelector()">
+      <button class="nav-item" id="nav-trocar-predio" onclick="showPredioSelector()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 16l4-4m0 0l-4-4m4 4H7"/><path d="M7 4H5a2 2 0 00-2 2v12a2 2 0 002 2h2"/></svg>
         Trocar prédio
       </button>
@@ -346,6 +346,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 
       <!-- DASHBOARD -->
       <div class="screen active" id="screen-dashboard">
+        <div id="superadmin-predio-filter" style="display:none;margin-bottom:16px;">
+          <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;">Filtrar por prédio</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;" id="predio-filter-chips"></div>
+        </div>
         <div class="stats-row">
           <div class="stat-card" onclick="irParaTickets('aberto')">
             <svg class="stat-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
@@ -372,6 +376,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 
       <!-- TICKETS -->
       <div class="screen" id="screen-tickets">
+        <div id="superadmin-predio-filter-tickets" style="display:none;margin-bottom:12px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;overflow-x:auto;padding-bottom:4px;" id="predio-filter-chips-tickets"></div>
+        </div>
         <div class="search-bar">
           <input type="search" class="search-input" id="search-input" placeholder="Buscar por título, descrição, local..." oninput="buscarTickets()">
           <button class="filter-toggle" id="filter-toggle-btn" onclick="toggleFilterPanel()">
@@ -723,9 +730,10 @@ const hoje = new Date().toISOString().split('T')[0];
 // ════════════════════════════════════════════════
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
-  if (token)      opts.headers['Authorization']  = 'Bearer ' + token;
+  if (token)       opts.headers['Authorization'] = 'Bearer ' + token;
   if (predioAtivo) opts.headers['x-predio-id']   = predioAtivo.id;
-  if (body)       opts.body = JSON.stringify(body);
+  // Superadmin sem prédio selecionado não manda x-predio-id (modo global)
+  if (body)        opts.body = JSON.stringify(body);
   const res  = await fetch(path, opts);
   const data = await res.json();
   if (!res.ok) throw new Error(data.erro || 'Erro');
@@ -746,16 +754,22 @@ window.addEventListener('load', async () => {
     const me = await api('GET', '/api/auth/me');
     currentUser = me;
     // Tenta restaurar prédio da sessão anterior
-    const savedId = parseInt(localStorage.getItem('op_predio_id'));
-    if (savedId && me.predios.find(p => p.id === savedId)) {
-      predioAtivo = me.predios.find(p => p.id === savedId);
-      entrarNoApp();
-    } else if (me.predios.length === 1) {
-      predioAtivo = me.predios[0];
+    // Superadmin entra direto em modo consolidado
+    if (['superadmin','admin'].includes(me.role)) {
+      predioAtivo = null;
       entrarNoApp();
     } else {
-      showPage('predio');
-      renderPredioGrid(me.predios, 'predio-grid');
+      const savedId = parseInt(localStorage.getItem('op_predio_id'));
+      if (savedId && me.predios.find(p => p.id === savedId)) {
+        predioAtivo = me.predios.find(p => p.id === savedId);
+        entrarNoApp();
+      } else if (me.predios.length === 1) {
+        predioAtivo = me.predios[0];
+        entrarNoApp();
+      } else {
+        showPage('predio');
+        renderPredioGrid(me.predios, 'predio-grid');
+      }
     }
   } catch {
     token = null;
@@ -785,10 +799,13 @@ async function fazerLogin() {
     currentUser = { ...data.usuario, predios: data.predios };
     localStorage.setItem('op_token', token);
 
-    if (data.predios.length === 0) {
+    // Superadmin/admin entram direto em modo consolidado (todos os prédios)
+    if (['superadmin','admin'].includes(data.usuario.role)) {
+      predioAtivo = null;
+      entrarNoApp();
+    } else if (data.predios.length === 0) {
       msg.className='msg-error'; msg.textContent='Sem prédios vinculados. Contate o admin.'; return;
-    }
-    if (data.predios.length === 1) {
+    } else if (data.predios.length === 1) {
       predioAtivo = data.predios[0];
       entrarNoApp();
     } else {
@@ -824,12 +841,14 @@ function selecionarPredio(id, nomeEnc, slug) {
 }
 
 async function entrarNoApp() {
-  // Verifica se precisa trocar senha
   if (currentUser.must_change_password) {
-    showPage('app'); // mostra o app por baixo
+    showPage('app');
     setTimeout(() => mostrarTrocaSenha(true), 300);
   }
   showPage('app');
+  // Superadmin: mostra "Todos os prédios" no switcher
+  const nomeAtivo = predioAtivo ? predioAtivo.nome : 'Todos os prédios';
+  document.getElementById('predio-nome-ativo').textContent = nomeAtivo;
   document.getElementById('predio-nome-ativo').textContent = predioAtivo.nome;
   document.getElementById('app-user-label').textContent =
     `${currentUser.nome}${currentUser.cargo ? ' · '+currentUser.cargo : ''}`;
@@ -899,9 +918,10 @@ function fmtPrazo(d) {
   return `<span style="font-size:12px;color:var(--text2)">${ds}</span>`;
 }
 function ticketCard(t) {
+  const predioTag = !predioAtivo && t.predio_nome ? `<span style="font-size:11px;background:var(--surface2);padding:2px 8px;border-radius:99px;color:var(--text2);">${t.predio_nome}</span>` : '';
   return `<div class="ticket-card" onclick="openDetail(${t.id})">
     <div class="tc-top"><div class="tc-title">${t.titulo}</div>${statusBadge(t.status)}</div>
-    <div class="tc-meta"><span>${t.categoria||''}</span>${t.local?`<span>· ${t.local}</span>`:''}</div>
+    <div class="tc-meta"><span>${t.categoria||''}</span>${t.local?`<span>· ${t.local}</span>`:''} ${predioTag}</div>
     <div class="tc-bottom">
       <div style="display:flex;align-items:center;gap:10px;">${prioBadge(t.prioridade||'Baixa')}${t.responsavel_nome?`<span style="font-size:12px;color:var(--text2)">${t.responsavel_nome}</span>`:''}</div>
       ${fmtPrazo(t.prazo)}
@@ -940,7 +960,56 @@ function irParaTicketsHoje() {
   document.getElementById('ticket-list').innerHTML = prazoH.length ? prazoH.map(ticketCard).join('') : emptyState('Sem tickets com prazo hoje.');
 }
 
+function renderFiltrosPredio() {
+  const container = document.getElementById('superadmin-predio-filter');
+  const chipsEl   = document.getElementById('predio-filter-chips');
+  if (!container || !chipsEl) return;
+  if (!predioAtivo && currentUser && ['superadmin','admin'].includes(currentUser.role)) {
+    container.style.display = 'block';
+    const predios = currentUser.predios || [];
+    chipsEl.innerHTML = `
+      <button class="chip active" id="chip-todos" onclick="filtrarPorPredio(null,this)">Todos</button>
+      ${predios.map(p => `<button class="chip" id="chip-${p.id}" onclick="filtrarPorPredio(${p.id},this)">${p.nome}</button>`).join('')}`;
+  } else {
+    container.style.display = 'none';
+  }
+}
+
+let filtroPredioAtual = null;
+
+function renderFiltrosPredioTickets() {
+  const container = document.getElementById('superadmin-predio-filter-tickets');
+  const chipsEl   = document.getElementById('predio-filter-chips-tickets');
+  if (!container||!chipsEl) return;
+  if (!predioAtivo && currentUser && ['superadmin','admin'].includes(currentUser.role)) {
+    container.style.display='block';
+    const predios = currentUser.predios||[];
+    chipsEl.innerHTML=`
+      <button class="chip active" onclick="filtrarPorPredio(null,this)">Todos</button>
+      ${predios.map(p=>`<button class="chip" onclick="filtrarPorPredio(${p.id},this)">${p.nome}</button>`).join('')}`;
+  } else { container.style.display='none'; }
+}
+
+async function filtrarPorPredio(predioId, el) {
+  filtroPredioAtual = predioId;
+  document.querySelectorAll('#predio-filter-chips .chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  // Recarrega stats e tickets com filtro
+  if (predioId) {
+    const r = await fetch(`/api/stats`, { headers: { 'Authorization':'Bearer '+token, 'x-predio-id': predioId }});
+    stats = await r.json();
+    const rt = await fetch(`/api/tickets?predio_id=${predioId}`, { headers: { 'Authorization':'Bearer '+token }});
+    allTickets = await rt.json();
+  } else {
+    stats = await GET('/api/stats');
+    allTickets = await GET('/api/tickets');
+  }
+  renderDashboard();
+  renderList();
+}
+
 function renderDashboard() {
+  renderFiltrosPredio();
   document.getElementById('s-aberto').textContent    = stats.aberto    ?? '—';
   document.getElementById('s-andamento').textContent = stats.andamento ?? '—';
   document.getElementById('s-resolvido').textContent = stats.resolvido ?? '—';
@@ -1730,7 +1799,7 @@ function showScreen(name,el){
   document.querySelectorAll('[data-tab]').forEach(t=>t.classList.remove('active'));
   if(el){el.classList.add('active');}
   if(name==='dashboard')  renderDashboard();
-  if(name==='tickets')    renderList();
+  if(name==='tickets')    { renderList(); renderFiltrosPredioTickets(); }
   if(name==='team')       renderTeam();
   if(name==='predios')    renderPrediosList();
   if(name==='relatorios') { /* static screen */ }
