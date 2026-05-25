@@ -9,6 +9,7 @@
 <meta name="theme-color" content="#1A1917">
 <link rel="manifest" href="/manifest.json">
 <title>Operação JFL Inc</title>
+<!-- v2.3 fix-checkboxes -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -739,7 +740,7 @@ const DEL   = p    => api('DELETE', p);
 // INIT
 // ════════════════════════════════════════════════
 window.addEventListener('load', async () => {
-  console.log('🚀 App v2.1 - fotos ativas');
+  console.log('🚀 App v2.3 - checkboxes fix');
   if (!token) { showPage('login'); return; }
   try {
     const me = await api('GET', '/api/auth/me');
