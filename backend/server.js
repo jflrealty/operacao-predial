@@ -464,20 +464,33 @@ app.delete('/api/usuarios/:id', auth, adminOnly, async (req, res) => {
 // TICKETS
 // ══════════════════════════════════════════════════════════════
 
-app.get('/api/tickets', auth, comPredio, async (req, res) => {
+app.get('/api/tickets', auth, async (req, res) => {
   try {
-    // Filtros de busca
-    const { q, status, prioridade, categoria, responsavel_id, de, ate } = req.query;
-    let query = 'SELECT * FROM tickets WHERE predio_id=$1';
-    const params = [req.predio_id];
+    const pid = parseInt(req.headers['x-predio-id']) || null;
+    const isSuper = ['superadmin','admin'].includes(req.user.role);
+    // Verifica acesso se não é superadmin
+    if (!isSuper && !pid) return res.status(400).json({ erro: 'Prédio não selecionado' });
+    if (!isSuper && pid) {
+      const { rows } = await pool.query('SELECT 1 FROM usuario_predios WHERE usuario_id=$1 AND predio_id=$2', [req.user.id, pid]);
+      if (!rows.length) return res.status(403).json({ erro: 'Sem acesso' });
+    }
 
-    if (status)         { params.push(status);         query += ` AND status=$${params.length}`; }
-    if (prioridade)     { params.push(prioridade);     query += ` AND prioridade=$${params.length}`; }
-    if (categoria)      { params.push(categoria);      query += ` AND categoria=$${params.length}`; }
-    if (responsavel_id) { params.push(parseInt(responsavel_id)); query += ` AND responsavel_id=$${params.length}`; }
-    if (de)             { params.push(de);             query += ` AND criado_em::date>=$${params.length}`; }
-    if (ate)            { params.push(ate);            query += ` AND criado_em::date<=$${params.length}`; }
-    if (q)              { params.push(`%${q}%`);       query += ` AND (titulo ILIKE $${params.length} OR descricao ILIKE $${params.length} OR local ILIKE $${params.length})`; }
+    const { q, status, prioridade, categoria, responsavel_id, de, ate, predio_id: filtroPrediod } = req.query;
+    // Superadmin pode filtrar por prédio específico via query param
+    const predioFiltro = filtroPrediod ? parseInt(filtroPrediod) : pid;
+
+    let query = predioFiltro
+      ? 'SELECT t.*, p.nome as predio_nome FROM tickets t JOIN predios p ON p.id=t.predio_id WHERE t.predio_id=$1'
+      : 'SELECT t.*, p.nome as predio_nome FROM tickets t JOIN predios p ON p.id=t.predio_id WHERE 1=1';
+    const params = predioFiltro ? [predioFiltro] : [];
+
+    if (status)         { params.push(status);         query += ` AND t.status=$${params.length}`; }
+    if (prioridade)     { params.push(prioridade);     query += ` AND t.prioridade=$${params.length}`; }
+    if (categoria)      { params.push(categoria);      query += ` AND t.categoria=$${params.length}`; }
+    if (responsavel_id) { params.push(parseInt(responsavel_id)); query += ` AND t.responsavel_id=$${params.length}`; }
+    if (de)             { params.push(de);             query += ` AND t.criado_em::date>=$${params.length}`; }
+    if (ate)            { params.push(ate);            query += ` AND t.criado_em::date<=$${params.length}`; }
+    if (q)              { params.push(`%${q}%`);       query += ` AND (t.titulo ILIKE $${params.length} OR t.descricao ILIKE $${params.length} OR t.local ILIKE $${params.length})`; }
 
     query += ' ORDER BY criado_em DESC';
     const { rows } = await pool.query(query, params);
@@ -804,14 +817,22 @@ app.patch('/api/auth/perfil', auth, async (req, res) => {
 // STATS
 // ══════════════════════════════════════════════════════════════
 
-app.get('/api/stats', auth, comPredio, async (req, res) => {
-  const pid=req.predio_id;
-  const hoje=new Date().toISOString().split('T')[0];
+app.get('/api/stats', auth, async (req, res) => {
+  const pid  = parseInt(req.headers['x-predio-id']) || null;
+  const hoje = new Date().toISOString().split('T')[0];
+  const isSuper = ['superadmin','admin'].includes(req.user.role);
+
+  // Superadmin sem prédio selecionado = todos os prédios
+  const wherePrediod = pid ? 'predio_id=$1' : (isSuper ? '1=1' : 'predio_id=-1');
+  const params = pid ? [pid] : [];
+  const params2 = pid ? [pid, hoje] : [hoje];
+  const wherePrediod2 = pid ? 'predio_id=$1 AND prazo::date=$2' : (isSuper ? 'prazo::date=$1' : '1=0');
+
   const [a,b,c,d]=await Promise.all([
-    pool.query(`SELECT COUNT(*) FROM tickets WHERE predio_id=$1 AND status='aberto'`,[pid]),
-    pool.query(`SELECT COUNT(*) FROM tickets WHERE predio_id=$1 AND status='em andamento'`,[pid]),
-    pool.query(`SELECT COUNT(*) FROM tickets WHERE predio_id=$1 AND status='resolvido'`,[pid]),
-    pool.query(`SELECT COUNT(*) FROM tickets WHERE predio_id=$1 AND prazo::date=$2 AND status!='resolvido'`,[pid,hoje]),
+    pool.query(`SELECT COUNT(*) FROM tickets WHERE ${wherePrediod} AND status='aberto'`, params),
+    pool.query(`SELECT COUNT(*) FROM tickets WHERE ${wherePrediod} AND status='em andamento'`, params),
+    pool.query(`SELECT COUNT(*) FROM tickets WHERE ${wherePrediod} AND status='resolvido'`, params),
+    pool.query(`SELECT COUNT(*) FROM tickets WHERE ${wherePrediod2} AND status NOT IN ('resolvido','cancelado')`, params2),
   ]);
   res.json({aberto:parseInt(a.rows[0].count),andamento:parseInt(b.rows[0].count),resolvido:parseInt(c.rows[0].count),hoje:parseInt(d.rows[0].count)});
 });
