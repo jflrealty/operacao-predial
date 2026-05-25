@@ -880,7 +880,7 @@ async function entrarNoApp() {
   document.getElementById('predio-nome-ativo').textContent = predioAtivo?.nome || 'Todos os prédios';
   document.getElementById('app-user-label').textContent =
     `${currentUser.nome}${currentUser.cargo ? ' · '+currentUser.cargo : ''}`;
-  document.getElementById('team-predio-label').textContent = predioAtivo?.nome || 'todos os prédios';
+  const teamLabel = document.getElementById('team-predio-label'); if (teamLabel) teamLabel.textContent = predioAtivo?.nome || 'todos os prédios';
 
   // Mostra itens de admin/superadmin
   const isAdmin = ['admin','superadmin'].includes(currentUser.role);
@@ -1142,7 +1142,7 @@ async function criarTicket() {
       for (const f of nFotosFiles) fd.append('fotos', f);
       await fetch(`/api/tickets/${ticket.id}/fotos`, {
         method:'POST',
-        headers:{'Authorization':'Bearer '+token,'x-predio-id':String(predioAtivo.id)},
+        headers:{'Authorization':'Bearer '+token,...(predioAtivo?{'x-predio-id':String(predioAtivo.id)}:{})},
         body: fd,
       });
     }
@@ -1335,13 +1335,13 @@ function openAddMember() {
   listEl.innerHTML=allPredios.map(p=>`
     <div onclick="togglePredioCheck(${p.id})" id="predio-item-${p.id}"
       style="display:flex;align-items:center;gap:12px;padding:14px 16px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;margin-bottom:8px;transition:all .12s;background:var(--surface);">
-      <div id="predio-check-${p.id}" style="width:20px;height:20px;border-radius:5px;border:2px solid ${p.id===predioAtivo.id?'var(--accent)':'var(--border2)'};background:${p.id===predioAtivo.id?'var(--accent)':'var(--surface)'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s;">
-        ${p.id===predioAtivo.id?'<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>':''}
+      <div id="predio-check-${p.id}" style="width:20px;height:20px;border-radius:5px;border:2px solid ${predioAtivo&&p.id===predioAtivo.id?'var(--accent)':'var(--border2)'};background:${predioAtivo&&p.id===predioAtivo.id?'var(--accent)':'var(--surface)'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s;">
+        ${predioAtivo&&p.id===predioAtivo.id?'<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>':''}
       </div>
       <span style="font-size:14px;font-weight:500;">${p.nome}</span>
     </div>`).join('');
   // Armazena quais estão selecionados
-  window._prediosSelecionados = new Set([predioAtivo.id]);
+  window._prediosSelecionados = new Set(predioAtivo ? [predioAtivo.id] : []);
   document.getElementById('overlay-member').classList.add('open');
 }
 function togglePredioCheck(id) {
@@ -1425,7 +1425,7 @@ function exportar(tipo) {
   if (de)     params.set('de', de);
   if (ate)    params.set('ate', ate);
   fetch(`/api/relatorios/${tipo}?${params}`, {
-    headers: { 'Authorization':'Bearer '+token, 'x-predio-id': String(predioAtivo.id) }
+    headers: { 'Authorization':'Bearer '+token, ...(predioAtivo ? {'x-predio-id': String(predioAtivo.id)} : {}) }
   }).then(r => {
     if (!r.ok) throw new Error('Erro ao gerar');
     return r.blob();
@@ -1488,7 +1488,7 @@ async function uploadFotos(ticketId, input) {
   try {
     const res = await fetch(`/api/tickets/${ticketId}/fotos`, {
       method:'POST',
-      headers:{ 'Authorization':'Bearer '+token, 'x-predio-id': String(predioAtivo.id) },
+      headers:{ 'Authorization':'Bearer '+token, ...(predioAtivo ? {'x-predio-id': String(predioAtivo.id)} : {}) },
       body: formData,
     });
     const data = await res.json();
@@ -1964,7 +1964,7 @@ function renderPrediosList(){
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <span class="badge ${p.ativo?'badge-resolvido':'badge-andamento'}">${p.ativo?'Ativo':'Inativo'}</span>
-        ${p.id!==predioAtivo.id?`<button class="btn btn-ghost btn-sm" onclick="selecionarPredio(${p.id},'${encodeURIComponent(p.nome)}','${p.slug}')">Ir →</button>`:'<span style="font-size:12px;color:var(--text2);">atual</span>'}
+        ${!predioAtivo||p.id!==predioAtivo.id?`<button class="btn btn-ghost btn-sm" onclick="selecionarPredio(${p.id},'${encodeURIComponent(p.nome)}','${p.slug}')">Ir →</button>`:'<span style="font-size:12px;color:var(--text2);">atual</span>'}
       </div>
     </div>`).join('');
 }
