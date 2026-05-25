@@ -1215,18 +1215,42 @@ function openAddMember() {
   document.getElementById('m-msg').textContent='';
   const listEl=document.getElementById('m-predios-list');
   listEl.innerHTML=allPredios.map(p=>`
-    <label class="check-item" style="cursor:pointer;">
-      <input type="checkbox" value="${p.id}" ${p.id===predioAtivo.id?'checked':''}
-        style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;">
-      <span style="font-size:14px;">${p.nome}</span>
-    </label>`).join('');
+    <div onclick="togglePredioCheck(${p.id})" id="predio-item-${p.id}"
+      style="display:flex;align-items:center;gap:12px;padding:14px 16px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;margin-bottom:8px;transition:all .12s;background:var(--surface);">
+      <div id="predio-check-${p.id}" style="width:20px;height:20px;border-radius:5px;border:2px solid ${p.id===predioAtivo.id?'var(--accent)':'var(--border2)'};background:${p.id===predioAtivo.id?'var(--accent)':'var(--surface)'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s;">
+        ${p.id===predioAtivo.id?'<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>':''}
+      </div>
+      <span style="font-size:14px;font-weight:500;">${p.nome}</span>
+    </div>`).join('');
+  // Armazena quais estão selecionados
+  window._prediosSelecionados = new Set([predioAtivo.id]);
   document.getElementById('overlay-member').classList.add('open');
 }
+function togglePredioCheck(id) {
+  if (!window._prediosSelecionados) window._prediosSelecionados = new Set();
+  const sel = window._prediosSelecionados;
+  const checkEl = document.getElementById('predio-check-'+id);
+  const itemEl  = document.getElementById('predio-item-'+id);
+  if (sel.has(id)) {
+    sel.delete(id);
+    checkEl.style.background = 'var(--surface)';
+    checkEl.style.borderColor = 'var(--border2)';
+    checkEl.innerHTML = '';
+    itemEl.style.borderColor = 'var(--border)';
+  } else {
+    sel.add(id);
+    checkEl.style.background = 'var(--accent)';
+    checkEl.style.borderColor = 'var(--accent)';
+    checkEl.innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>';
+    itemEl.style.borderColor = 'var(--accent)';
+  }
+}
+
 async function adicionarMembro(){
   const email=document.getElementById('m-email').value.trim();
   const role=document.getElementById('m-role').value;
   const msg=document.getElementById('m-msg');
-  const predio_ids=[...document.querySelectorAll('#m-predios-list input:checked')].map(el=>parseInt(el.value));
+  const predio_ids=[...( window._prediosSelecionados||new Set())].map(id=>parseInt(id));
   if(!email){msg.className='msg-error';msg.textContent='Informe o e-mail.';return;}
   msg.textContent='Enviando convite...';msg.className='';
   try{
