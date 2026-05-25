@@ -761,8 +761,8 @@ const hoje = new Date().toISOString().split('T')[0];
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (token)       opts.headers['Authorization'] = 'Bearer ' + token;
-  if (predioAtivo) opts.headers['x-predio-id']   = predioAtivo.id;
-  // Superadmin sem prédio selecionado não manda x-predio-id (modo global)
+  if (predioAtivo && predioAtivo.id) opts.headers['x-predio-id'] = predioAtivo.id;
+  // Superadmin sem prédio selecionado não manda x-predio-id (modo global — busca todos)
   if (body)        opts.body = JSON.stringify(body);
   const res  = await fetch(path, opts);
   const data = await res.json();
@@ -882,7 +882,7 @@ async function entrarNoApp() {
   document.getElementById('predio-nome-ativo').textContent = predioAtivo.nome;
   document.getElementById('app-user-label').textContent =
     `${currentUser.nome}${currentUser.cargo ? ' · '+currentUser.cargo : ''}`;
-  document.getElementById('team-predio-label').textContent = predioAtivo.nome;
+  document.getElementById('team-predio-label').textContent = predioAtivo?.nome || 'todos os prédios';
 
   // Mostra itens de admin/superadmin
   const isAdmin = ['admin','superadmin'].includes(currentUser.role);
@@ -913,8 +913,14 @@ function fazerLogout() {
 // DATA
 // ════════════════════════════════════════════════
 let stats = {};
-async function loadStats()     { stats = await GET('/api/stats'); }
-async function loadTickets()   { allTickets = await GET('/api/tickets'); }
+async function loadStats() {
+  try { stats = await GET('/api/stats'); }
+  catch(e) { stats = { aberto:0, andamento:0, resolvido:0, hoje:0 }; }
+}
+async function loadTickets() {
+  try { allTickets = await GET('/api/tickets'); }
+  catch(e) { allTickets = []; console.error('loadTickets:', e.message); }
+}
 async function loadMembros() {
   try { membersList = await GET('/api/usuarios'); }
   catch(e) { membersList = []; }
@@ -1126,6 +1132,7 @@ async function criarTicket() {
   const prazo  = document.getElementById('n-prazo').value || null;
   const respId = document.getElementById('n-resp').value || null;
   const msg    = document.getElementById('n-msg');
+  if (!predioAtivo) { msg.className='msg-error'; msg.textContent='Selecione um prédio específico para abrir um ticket.'; return; }
   if (!origem||!cat||!desc) { msg.className='msg-error'; msg.textContent='Preencha origem, categoria e descrição.'; return; }
   const titulo = cat + (local?' – '+local:'');
   try {
