@@ -877,9 +877,7 @@ async function entrarNoApp() {
   }
   showPage('app');
   // Superadmin: mostra "Todos os prédios" no switcher
-  const nomeAtivo = predioAtivo ? predioAtivo.nome : 'Todos os prédios';
-  document.getElementById('predio-nome-ativo').textContent = nomeAtivo;
-  document.getElementById('predio-nome-ativo').textContent = predioAtivo.nome;
+  document.getElementById('predio-nome-ativo').textContent = predioAtivo?.nome || 'Todos os prédios';
   document.getElementById('app-user-label').textContent =
     `${currentUser.nome}${currentUser.cargo ? ' · '+currentUser.cargo : ''}`;
   document.getElementById('team-predio-label').textContent = predioAtivo?.nome || 'todos os prédios';
@@ -1192,7 +1190,7 @@ async function openDetail(id) {
   // Substitui placeholder TICKETID pelo ID real na seção de fotos do template
   // (feito via JS após render)
   const detailHtml = `
-    <div class="detail-id">#${t.id} · ${predioAtivo.nome}</div>
+    <div class="detail-id">#${t.id}${predioAtivo?.nome ? " · "+predioAtivo.nome : ""}</div>
     <div class="detail-title">${t.titulo}</div>
     <div style="display:flex;gap:8px;margin:10px 0 16px;flex-wrap:wrap;">${statusBadge(t.status)} ${prioBadge(t.prioridade||'Baixa')}</div>
     <div class="detail-grid">
