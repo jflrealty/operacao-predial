@@ -1214,9 +1214,10 @@ function openAddMember() {
   document.getElementById('m-msg').textContent='';
   const listEl=document.getElementById('m-predios-list');
   listEl.innerHTML=allPredios.map(p=>`
-    <label class="check-item">
-      <input type="checkbox" value="${p.id}" ${p.id===predioAtivo.id?'checked':''}>
-      <label>${p.nome}</label>
+    <label class="check-item" style="cursor:pointer;">
+      <input type="checkbox" value="${p.id}" ${p.id===predioAtivo.id?'checked':''}
+        style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;">
+      <span style="font-size:14px;">${p.nome}</span>
     </label>`).join('');
   document.getElementById('overlay-member').classList.add('open');
 }
