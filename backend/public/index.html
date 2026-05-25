@@ -313,14 +313,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
         Relatórios
       </button>
-      <div class="nav-section admin-only" style="display:none;">Admin</div>
-      <button class="nav-item admin-only" style="display:none;" onclick="showScreen('team',this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-        Time
-      </button>
-      <button class="nav-item superadmin-only" style="display:none;" onclick="showScreen('predios',this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-        Prédios
+      <button class="nav-item admin-only" style="display:none;" onclick="showScreen('admin',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        Painel Admin
       </button>
       <div class="nav-section">Conta</div>
       <button class="nav-item" onclick="showScreen('perfil',this)">
@@ -432,14 +427,49 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         <div id="ticket-list"><div class="loader">Carregando...</div></div>
       </div>
 
-      <!-- TEAM -->
-      <div class="screen" id="screen-team">
-        <div class="info-box">👤 Membros vinculados a <strong id="team-predio-label">este prédio</strong>. Admins e superadmins acessam todos os prédios automaticamente.</div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-          <div class="section-title" style="margin:0;">Membros</div>
-          <button class="btn btn-ghost btn-sm" onclick="openAddMember()">+ Adicionar</button>
+      <!-- PAINEL ADMIN -->
+      <div class="screen" id="screen-admin">
+        <!-- TABS DO PAINEL -->
+        <div style="display:flex;gap:4px;background:var(--surface2);border-radius:var(--radius-lg);padding:4px;margin-bottom:20px;">
+          <button class="admin-tab active" id="atab-usuarios" onclick="showAdminTab('usuarios',this)" style="flex:1;padding:9px;border:none;border-radius:var(--radius);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text);transition:all .15s;">👥 Usuários</button>
+          <button class="admin-tab" id="atab-predios" onclick="showAdminTab('predios',this)" style="flex:1;padding:9px;border:none;border-radius:var(--radius);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;background:none;color:var(--text2);transition:all .15s;">🏢 Prédios</button>
+          <button class="admin-tab" id="atab-kpis" onclick="showAdminTab('kpis',this)" style="flex:1;padding:9px;border:none;border-radius:var(--radius);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;background:none;color:var(--text2);transition:all .15s;">📊 KPIs</button>
         </div>
-        <div id="team-list"><div class="loader">Carregando...</div></div>
+
+        <!-- ABA: USUÁRIOS -->
+        <div id="admin-tab-usuarios">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <div>
+              <div style="font-size:14px;font-weight:600;">Todos os usuários</div>
+              <div style="font-size:12px;color:var(--text2);margin-top:2px;">Todos os prédios</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="openAddMember()">+ Convidar</button>
+          </div>
+          <div class="search-bar" style="margin-bottom:12px;">
+            <input type="search" class="search-input" id="admin-user-search" placeholder="Buscar por nome ou e-mail..." oninput="filtrarUsuariosAdmin()">
+          </div>
+          <div id="admin-users-list"><div class="loader">Carregando...</div></div>
+        </div>
+
+        <!-- ABA: PRÉDIOS -->
+        <div id="admin-tab-predios" style="display:none;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <div style="font-size:14px;font-weight:600;">Prédios cadastrados</div>
+            <button class="btn btn-ghost btn-sm superadmin-only" onclick="openAddPredio()">+ Novo prédio</button>
+          </div>
+          <div id="admin-predios-list"><div class="loader">Carregando...</div></div>
+        </div>
+
+        <!-- ABA: KPIs -->
+        <div id="admin-tab-kpis" style="display:none;">
+          <div style="font-size:14px;font-weight:600;margin-bottom:16px;">Indicadores por prédio</div>
+          <div id="admin-kpis-list"><div class="loader">Carregando...</div></div>
+        </div>
+      </div>
+
+      <!-- TEAM (mantido para compatibilidade, oculto) -->
+      <div class="screen" id="screen-team" style="display:none!important;">
+        <div id="team-list"></div>
       </div>
 
       <!-- RELATÓRIOS -->
@@ -561,9 +591,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
       Relatórios
     </button>
-    <button class="bottom-tab admin-only" data-tab style="display:none;" onclick="showScreen('team',this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-      Time
+    <button class="bottom-tab admin-only" data-tab style="display:none;" onclick="showScreen('admin',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+      Admin
     </button>
   </div>
   <button class="fab" onclick="showNewTicket()">+</button>
@@ -966,10 +996,18 @@ function renderFiltrosPredio() {
   if (!container || !chipsEl) return;
   if (!predioAtivo && currentUser && ['superadmin','admin'].includes(currentUser.role)) {
     container.style.display = 'block';
-    const predios = currentUser.predios || [];
-    chipsEl.innerHTML = `
-      <button class="chip active" id="chip-todos" onclick="filtrarPorPredio(null,this)">Todos</button>
-      ${predios.map(p => `<button class="chip" id="chip-${p.id}" onclick="filtrarPorPredio(${p.id},this)">${p.nome}</button>`).join('')}`;
+    // Só (re)cria os chips se ainda não existirem
+    if (!chipsEl.children.length) {
+      const predios = currentUser.predios || [];
+      chipsEl.innerHTML = `
+        <button class="chip active" id="chip-todos" onclick="filtrarPorPredio(null,this)">Todos</button>
+        ${predios.map(p => `<button class="chip" id="chip-${p.id}" onclick="filtrarPorPredio(${p.id},this)">${p.nome}</button>`).join('')}`;
+    }
+    // Restaura estado ativo sem recriar
+    chipsEl.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    const activeId = filtroPredioAtual ? `chip-${filtroPredioAtual}` : 'chip-todos';
+    const activeEl = document.getElementById(activeId);
+    if (activeEl) activeEl.classList.add('active');
   } else {
     container.style.display = 'none';
   }
@@ -983,10 +1021,16 @@ function renderFiltrosPredioTickets() {
   if (!container||!chipsEl) return;
   if (!predioAtivo && currentUser && ['superadmin','admin'].includes(currentUser.role)) {
     container.style.display='block';
-    const predios = currentUser.predios||[];
-    chipsEl.innerHTML=`
-      <button class="chip active" onclick="filtrarPorPredio(null,this)">Todos</button>
-      ${predios.map(p=>`<button class="chip" onclick="filtrarPorPredio(${p.id},this)">${p.nome}</button>`).join('')}`;
+    if (!chipsEl.children.length) {
+      const predios = currentUser.predios||[];
+      chipsEl.innerHTML=`
+        <button class="chip" id="chipt-todos" onclick="filtrarPorPredio(null,this)">Todos</button>
+        ${predios.map(p=>`<button class="chip" id="chipt-${p.id}" onclick="filtrarPorPredio(${p.id},this)">${p.nome}</button>`).join('')}`;
+    }
+    chipsEl.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+    const activeId = filtroPredioAtual ? `chipt-${filtroPredioAtual}` : 'chipt-todos';
+    const activeEl = document.getElementById(activeId);
+    if (activeEl) activeEl.classList.add('active');
   } else { container.style.display='none'; }
 }
 
@@ -1693,6 +1737,137 @@ async function sugerirPrazoSLA(categoria) {
 }
 
 // ════════════════════════════════════════════════
+// PAINEL ADMIN
+// ════════════════════════════════════════════════
+let todosUsuarios = [];
+
+function showAdminTab(tab, el) {
+  ['usuarios','predios','kpis'].forEach(t => {
+    document.getElementById('admin-tab-'+t).style.display = t===tab ? 'block' : 'none';
+  });
+  document.querySelectorAll('.admin-tab').forEach(b => {
+    b.style.background = 'none';
+    b.style.color = 'var(--text2)';
+  });
+  el.style.background = 'var(--surface)';
+  el.style.color = 'var(--text)';
+
+  if (tab==='usuarios') carregarTodosUsuarios();
+  if (tab==='predios')  carregarPrediosAdmin();
+  if (tab==='kpis')     carregarKPIs();
+}
+
+async function carregarTodosUsuarios() {
+  const el = document.getElementById('admin-users-list');
+  el.innerHTML = '<div class="loader">Carregando...</div>';
+  try {
+    // Busca todos os usuários sem filtro de prédio
+    const opts = { headers: { 'Authorization':'Bearer '+token } };
+    const res = await fetch('/api/usuarios', opts);
+    todosUsuarios = await res.json();
+    renderUsuariosAdmin(todosUsuarios);
+  } catch(e) { el.innerHTML = emptyState('Erro ao carregar usuários.'); }
+}
+
+function filtrarUsuariosAdmin() {
+  const q = document.getElementById('admin-user-search')?.value.toLowerCase().trim() || '';
+  const filtrados = q ? todosUsuarios.filter(u =>
+    u.nome?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
+  ) : todosUsuarios;
+  renderUsuariosAdmin(filtrados);
+}
+
+function renderUsuariosAdmin(lista) {
+  const el = document.getElementById('admin-users-list');
+  if (!lista.length) { el.innerHTML = emptyState('Nenhum usuário encontrado.'); return; }
+  el.innerHTML = lista.map(u => `
+    <div class="member-card">
+      <div style="flex:1;min-width:0;">
+        <div class="member-name">${u.nome&&u.nome!==u.email?u.nome:''}</div>
+        <div style="font-size:13px;color:var(--text2);">${u.email}</div>
+        <div class="member-meta" style="margin-top:3px;">
+          <span style="background:var(--surface2);padding:2px 8px;border-radius:99px;font-size:11px;">${u.role}</span>
+          ${u.cargo?`<span style="color:var(--text3);"> · ${u.cargo}</span>`:''}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+        ${u.id!==currentUser.id?`
+          <button class="btn btn-ghost btn-sm" onclick="reenviarConvite(${u.id})" title="Resetar senha e reenviar convite">🔑 Reset</button>
+          <button class="btn btn-ghost btn-sm btn-danger" onclick="removerMembro(${u.id});carregarTodosUsuarios()">Remover</button>
+        `:'<span style="font-size:12px;color:var(--text3);">você</span>'}
+      </div>
+    </div>`).join('');
+}
+
+async function carregarPrediosAdmin() {
+  const el = document.getElementById('admin-predios-list');
+  if (!el) return;
+  try {
+    const predios = await api('GET', '/api/predios');
+    if (!predios.length) { el.innerHTML = emptyState('Nenhum prédio cadastrado.'); return; }
+    el.innerHTML = predios.map(p => `
+      <div class="predio-admin-card">
+        <div>
+          <div class="predio-admin-nome">${p.nome}</div>
+          <div class="predio-admin-slug">${p.slug}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span class="badge ${p.ativo?'badge-resolvido':'badge-andamento'}">${p.ativo?'Ativo':'Inativo'}</span>
+          <button class="btn btn-ghost btn-sm" onclick="filtrarPorPredio(${p.id}, document.getElementById('chip-${p.id}')||{classList:{add:()=>{},remove:()=>{}}});showScreen('dashboard',null)">Ver tickets →</button>
+        </div>
+      </div>`).join('');
+  } catch(e) { el.innerHTML = emptyState('Erro ao carregar prédios.'); }
+}
+
+async function carregarKPIs() {
+  const el = document.getElementById('admin-kpis-list');
+  if (!el) return;
+  el.innerHTML = '<div class="loader">Calculando KPIs...</div>';
+  try {
+    const predios = currentUser.predios || [];
+    const kpiData = await Promise.all(predios.map(async p => {
+      const [statsRes, ticketsRes] = await Promise.all([
+        fetch(`/api/stats`, { headers:{'Authorization':'Bearer '+token,'x-predio-id':p.id} }).then(r=>r.json()),
+        fetch(`/api/tickets`, { headers:{'Authorization':'Bearer '+token,'x-predio-id':p.id} }).then(r=>r.json()),
+      ]);
+      const tickets = ticketsRes;
+      const total = tickets.length;
+      const resolvidos = tickets.filter(t=>t.status==='resolvido').length;
+      const atrasados = tickets.filter(t=>t.prazo&&t.prazo.split('T')[0]<new Date().toISOString().split('T')[0]&&t.status!=='resolvido'&&t.status!=='cancelado').length;
+      const taxaResolucao = total > 0 ? Math.round(resolvidos/total*100) : 0;
+      return { predio: p, stats: statsRes, total, resolvidos, atrasados, taxaResolucao };
+    }));
+
+    el.innerHTML = kpiData.map(k => `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div style="font-size:15px;font-weight:600;">${k.predio.nome}</div>
+          <div style="font-size:12px;color:var(--text2);">${k.total} tickets total</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
+          <div style="text-align:center;">
+            <div style="font-size:22px;font-weight:700;color:var(--blue);">${k.stats.aberto}</div>
+            <div style="font-size:11px;color:var(--text2);">Abertos</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:22px;font-weight:700;color:var(--amber);">${k.stats.andamento}</div>
+            <div style="font-size:11px;color:var(--text2);">Andamento</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:22px;font-weight:700;color:${k.atrasados>0?'var(--red)':'var(--green)'};">${k.atrasados}</div>
+            <div style="font-size:11px;color:var(--text2);">Atrasados</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:22px;font-weight:700;color:var(--green);">${k.taxaResolucao}%</div>
+            <div style="font-size:11px;color:var(--text2);">Resolvidos</div>
+          </div>
+        </div>
+        ${k.atrasados > 0 ? `<div style="margin-top:10px;padding:8px 12px;background:var(--red-bg);border-radius:var(--radius);font-size:12px;color:var(--red);">⚠️ ${k.atrasados} ticket(s) com prazo vencido</div>` : ''}
+      </div>`).join('');
+  } catch(e) { el.innerHTML = emptyState('Erro ao carregar KPIs.'); }
+}
+
+// ════════════════════════════════════════════════
 // PRÉDIOS (superadmin)
 // ════════════════════════════════════════════════
 function openAddPredio(){
@@ -1800,7 +1975,7 @@ function showScreen(name,el){
   if(el){el.classList.add('active');}
   if(name==='dashboard')  renderDashboard();
   if(name==='tickets')    { renderList(); renderFiltrosPredioTickets(); }
-  if(name==='team')       renderTeam();
+  if(name==='admin')      { carregarTodosUsuarios(); }
   if(name==='predios')    renderPrediosList();
   if(name==='relatorios') { /* static screen */ }
   if(name==='perfil')     carregarPerfil();
