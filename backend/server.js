@@ -214,7 +214,14 @@ const pool = new Pool({
 // ── MIDDLEWARE ────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: false,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('index.html')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    }
+  }
+}));
 app.use('/uploads', express.static(UPLOAD_DIR));
 
 // ── AUTH ──────────────────────────────────────────────────────
