@@ -1252,6 +1252,30 @@ async function calcularKPIs(predioId, responsavelId, de, ate) {
   };
 }
 
+// GET /api/relatorios/dados — JSON para relatório em tela
+app.get('/api/relatorios/dados', auth, async (req, res) => {
+  try {
+    const isAdmin = ['superadmin','admin'].includes(req.user.role);
+    const predioId = req.query.predio_id ? parseInt(req.query.predio_id) : (parseInt(req.headers['x-predio-id'])||null);
+    const filtros = { ...req.query };
+    if (!isAdmin) filtros.responsavel_id = req.user.id;
+    const tickets = await buscarTicketsRelatorio(predioId, filtros);
+    res.json(tickets);
+  } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
+});
+
+// GET /api/relatorios/kpi/dados — JSON para KPI em tela
+app.get('/api/relatorios/kpi/dados', auth, async (req, res) => {
+  try {
+    const isAdmin = ['superadmin','admin'].includes(req.user.role);
+    const predioId = req.query.predio_id ? parseInt(req.query.predio_id) : (parseInt(req.headers['x-predio-id'])||null);
+    const responsavelId = req.query.responsavel_id ? parseInt(req.query.responsavel_id) : (!isAdmin ? req.user.id : null);
+    const { de, ate } = req.query;
+    const kpi = await calcularKPIs(predioId, responsavelId, de, ate);
+    res.json(kpi);
+  } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
+});
+
 // GET /api/relatorios/kpi/excel
 app.get('/api/relatorios/kpi/excel', auth, async (req, res) => {
   try {
