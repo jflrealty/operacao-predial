@@ -1369,9 +1369,41 @@ async function carregarUnidadesForm() {
   }
 }
 
+let tipoLocalAtual = 'unidade';
+
+function setTipoLocal(tipo) {
+  tipoLocalAtual = tipo;
+  const btnU = document.getElementById('btn-tipo-unidade');
+  const btnA = document.getElementById('btn-tipo-area');
+  const campoU = document.getElementById('campo-unidade');
+  const campoA = document.getElementById('campo-area-comum');
+  const campoC = document.getElementById('campo-complemento');
+
+  if (tipo === 'unidade') {
+    btnU.style.background = 'var(--accent)'; btnU.style.color = '#fff'; btnU.style.borderColor = 'var(--accent)';
+    btnA.style.background = 'var(--surface)'; btnA.style.color = 'var(--text2)'; btnA.style.borderColor = 'var(--border)';
+    campoU.style.display = 'block';
+    campoA.style.display = 'none';
+    campoC.style.display = 'block';
+    // Label complemento
+    campoC.querySelector('label').textContent = 'Complemento';
+    document.getElementById('n-local').placeholder = 'Ex: Proximo ao elevador, lado direito...';
+  } else {
+    btnA.style.background = 'var(--accent)'; btnA.style.color = '#fff'; btnA.style.borderColor = 'var(--accent)';
+    btnU.style.background = 'var(--surface)'; btnU.style.color = 'var(--text2)'; btnU.style.borderColor = 'var(--border)';
+    campoU.style.display = 'none';
+    campoA.style.display = 'block';
+    campoC.style.display = 'block';
+    campoC.querySelector('label').textContent = 'Complemento (opcional)';
+    document.getElementById('n-local').placeholder = 'Ex: Lado esquerdo, proximo a...';
+    // Limpa histórico
+    const hist = document.getElementById('n-unidade-hist');
+    if (hist) hist.style.display = 'none';
+  }
+}
+
 function selecionarUnidade(label) {
   if (label) {
-    document.getElementById('n-local').placeholder = 'Ex: Area comum, corredor, garagem...';
     buscarHistoricoUnidade(label);
   } else {
     const hist = document.getElementById('n-unidade-hist');
@@ -1382,9 +1414,16 @@ async function criarTicket() {
   const origem = document.getElementById('n-origem').value;
   const cat    = document.getElementById('n-cat').value;
   const desc   = document.getElementById('n-desc').value.trim();
-  const unidade = document.getElementById('n-unidade').value;
-  const localComp = document.getElementById('n-local').value.trim();
-  const local = unidade ? (localComp ? `${unidade} — ${localComp}` : unidade) : localComp;
+  let local = '';
+  if (tipoLocalAtual === 'area') {
+    const areaComum = document.getElementById('n-area-comum')?.value.trim() || '';
+    const localComp = document.getElementById('n-local').value.trim();
+    local = areaComum ? (localComp ? `${areaComum} — ${localComp}` : areaComum) : localComp;
+  } else {
+    const unidade = document.getElementById('n-unidade').value;
+    const localComp = document.getElementById('n-local').value.trim();
+    local = unidade ? (localComp ? `${unidade} — ${localComp}` : unidade) : localComp;
+  }
   const prio   = document.getElementById('n-prio').value;
   const prazo  = document.getElementById('n-prazo').value || null;
   const respId = document.getElementById('n-resp').value || null;
@@ -1422,6 +1461,8 @@ async function criarTicket() {
     document.getElementById('n-fotos').value='';
     document.getElementById('n-unidade').value='';
     document.getElementById('n-local').value='';
+    if (document.getElementById('n-area-comum')) document.getElementById('n-area-comum').value='';
+    setTipoLocal('unidade'); // reset para unidade
     nFotosFiles = [];
     renderNFotosPreview();
     await loadStats(); await loadTickets(); renderDashboard(); renderList();
