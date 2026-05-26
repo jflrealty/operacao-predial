@@ -1,5 +1,5 @@
-// Service Worker — Operação JFL Inc
-const CACHE = 'jfl-op-v1';
+// Service Worker v2 — Operacao JFL Inc
+const CACHE = 'jfl-op-v2';
 const STATIC = ['/', '/manifest.json'];
 
 self.addEventListener('install', e => {
@@ -17,10 +17,8 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Apenas GET — não intercepta API calls
   if (e.request.method !== 'GET') return;
   if (e.request.url.includes('/api/') || e.request.url.includes('/uploads/')) return;
-
   e.respondWith(
     fetch(e.request)
       .then(res => {
@@ -29,5 +27,32 @@ self.addEventListener('fetch', e => {
         return res;
       })
       .catch(() => caches.match(e.request))
+  );
+});
+
+// ── PUSH NOTIFICATIONS ──────────────────────────────────────
+self.addEventListener('push', e => {
+  let data = { title: 'Operacao JFL Inc', body: 'Nova notificacao', url: '/' };
+  try { if (e.data) data = { ...data, ...e.data.json() }; } catch(err) {}
+  e.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: 'jfl-notif',
+      renotify: true,
+      data: { url: data.url },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(
+    clients.matchAll({ type:'window', includeUncontrolled:true }).then(cs => {
+      const c = cs.find(c => c.url.includes(self.location.origin));
+      if (c) { c.focus(); c.navigate(e.notification.data?.url || '/'); }
+      else clients.openWindow(e.notification.data?.url || '/');
+    })
   );
 });
