@@ -1172,24 +1172,31 @@ function irParaTicketsHoje() {
   document.getElementById('ticket-list').innerHTML = prazoH.length ? prazoH.map(ticketCard).join('') : emptyState('Sem tickets com prazo hoje.');
 }
 
+function inicializarChipsPredio() {
+  if (!currentUser || !['superadmin','admin'].includes(currentUser.role) || predioAtivo) return;
+  const predios = currentUser.predios || [];
+  const chipsEl = document.getElementById('predio-filter-chips');
+  if (chipsEl && !chipsEl.children.length) {
+    chipsEl.innerHTML =
+      '<button class="chip active" id="chip-todos" data-predio-id="" onclick="filtrarPorPredio(null,this)">Todos</button>' +
+      predios.map(p => `<button class="chip" id="chip-${p.id}" data-predio-id="${p.id}" onclick="filtrarPorPredio(${p.id},this)">${p.nome}</button>`).join('');
+  }
+  const chipsElT = document.getElementById('predio-filter-chips-tickets');
+  if (chipsElT && !chipsElT.children.length) {
+    chipsElT.innerHTML =
+      '<button class="chip active" id="chipt-todos" data-predio-id="" onclick="filtrarPorPredio(null,this)">Todos</button>' +
+      predios.map(p => `<button class="chip" id="chipt-${p.id}" data-predio-id="${p.id}" onclick="filtrarPorPredio(${p.id},this)">${p.nome}</button>`).join('');
+  }
+  atualizarChipsDashboard();
+  atualizarChipsTickets();
+}
+
 function renderFiltrosPredio() {
   const container = document.getElementById('superadmin-predio-filter');
-  const chipsEl   = document.getElementById('predio-filter-chips');
-  if (!container || !chipsEl) return;
+  if (!container) return;
   if (!predioAtivo && currentUser && ['superadmin','admin'].includes(currentUser.role)) {
     container.style.display = 'block';
-    // Só (re)cria os chips se ainda não existirem
-    if (!chipsEl.children.length) {
-      const predios = currentUser.predios || [];
-      chipsEl.innerHTML = `
-        <button class="chip active" id="chip-todos" data-predio-id="" onclick="filtrarPorPredio(null,this)">Todos</button>
-        ${predios.map(p => `<button class="chip" id="chip-${p.id}" data-predio-id="${p.id}" onclick="filtrarPorPredio(${p.id},this)">${p.nome}</button>`).join('')}`;
-    }
-    // Restaura estado ativo sem recriar
-    chipsEl.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-    const activeId = filtroPredioAtual ? `chip-${filtroPredioAtual}` : 'chip-todos';
-    const activeEl = document.getElementById(activeId);
-    if (activeEl) activeEl.classList.add('active');
+    atualizarChipsDashboard();
   } else {
     container.style.display = 'none';
   }
@@ -1197,22 +1204,14 @@ function renderFiltrosPredio() {
 
 function renderFiltrosPredioTickets() {
   const container = document.getElementById('superadmin-predio-filter-tickets');
-  const chipsEl   = document.getElementById('predio-filter-chips-tickets');
-  if (!container||!chipsEl) return;
+  if (!container) return;
   if (!predioAtivo && currentUser && ['superadmin','admin'].includes(currentUser.role)) {
-    container.style.display='block';
-    if (!chipsEl.children.length) {
-      const predios = currentUser.predios||[];
-      chipsEl.innerHTML=`
-        <button class="chip" id="chipt-todos" data-predio-id="" onclick="filtrarPorPredio(null,this)">Todos</button>
-        ${predios.map(p=>`<button class="chip" id="chipt-${p.id}" data-predio-id="${p.id}" onclick="filtrarPorPredio(${p.id},this)">${p.nome}</button>`).join('')}`;
-    }
-    chipsEl.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
-    const activeId = filtroPredioAtual ? `chipt-${filtroPredioAtual}` : 'chipt-todos';
-    const activeEl = document.getElementById(activeId);
-    if (activeEl) activeEl.classList.add('active');
-  } else { container.style.display='none'; }
+    container.style.display = 'block';
+    atualizarChipsTickets();
+  } else { container.style.display = 'none'; }
 }
+
+
 
 // Set de prédios selecionados nos filtros (multi-select)
 let filtrosPrediosSelecionados = new Set();
