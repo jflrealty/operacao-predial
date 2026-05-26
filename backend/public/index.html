@@ -1068,11 +1068,22 @@ function fazerLogout() {
 // ════════════════════════════════════════════════
 let stats = {};
 async function loadStats() {
-  try { stats = await GET('/api/stats'); }
+  try {
+    // Superadmin sem prédio — fetch direto sem x-predio-id
+    const headers = { 'Authorization': 'Bearer '+token };
+    if (predioAtivo) headers['x-predio-id'] = predioAtivo.id;
+    const r = await fetch('/api/stats', { headers });
+    stats = await r.json();
+  }
   catch(e) { stats = { aberto:0, andamento:0, resolvido:0, hoje:0 }; }
 }
 async function loadTickets() {
-  try { allTickets = await GET('/api/tickets'); }
+  try {
+    const headers = { 'Authorization': 'Bearer '+token };
+    if (predioAtivo) headers['x-predio-id'] = predioAtivo.id;
+    const r = await fetch('/api/tickets', { headers });
+    allTickets = await r.json();
+  }
   catch(e) { allTickets = []; console.error('loadTickets:', e.message); }
 }
 async function loadMembros() {
@@ -1245,32 +1256,42 @@ function atualizarChipsTickets() {
 
 async function recarregarComFiltros() {
   const selecionados = [...filtrosPrediosSelecionados];
+  const authHeader = { 'Authorization':'Bearer '+token };
 
-  if (selecionados.length === 0) {
-    // Sem filtro — carrega tudo
-    const [s, t] = await Promise.all([GET('/api/stats'), GET('/api/tickets')]);
-    stats = s; allTickets = t;
-  } else if (selecionados.length === 1) {
-    // Um prédio — usa x-predio-id
-    const pid = selecionados[0];
-    const [sr, tr] = await Promise.all([
-      fetch('/api/stats', { headers: { 'Authorization':'Bearer '+token, 'x-predio-id': pid }}).then(r=>r.json()),
-      fetch(`/api/tickets?predio_id=${pid}`, { headers: { 'Authorization':'Bearer '+token }}).then(r=>r.json()),
-    ]);
-    stats = sr; allTickets = tr;
-  } else {
-    // Múltiplos prédios — busca cada um e combina
-    const results = await Promise.all(selecionados.map(pid =>
-      fetch(`/api/tickets?predio_id=${pid}`, { headers: { 'Authorization':'Bearer '+token }}).then(r=>r.json())
-    ));
-    allTickets = results.flat().sort((a,b) => new Date(b.criado_em) - new Date(a.criado_em));
-    // Stats combinados dos tickets em memória
-    stats = {
-      aberto:    allTickets.filter(t=>t.status==='aberto').length,
-      andamento: allTickets.filter(t=>t.status==='em andamento').length,
-      resolvido: allTickets.filter(t=>t.status==='resolvido').length,
-      hoje:      allTickets.filter(t=>t.prazo&&t.prazo.split('T')[0]===hoje&&!['resolvido','cancelado'].includes(t.status)).length,
-    };
+  try {
+    if (selecionados.length === 0) {
+      // Sem filtro — carrega tudo (sem x-predio-id = consolidado)
+      const [s, t] = await Promise.all([
+        fetch('/api/stats', { headers: authHeader }).then(r=>r.json()),
+        fetch('/api/tickets', { headers: authHeader }).then(r=>r.json()),
+      ]);
+      stats = s; allTickets = t;
+    } else if (selecionados.length === 1) {
+      // Um prédio
+      const pid = selecionados[0];
+      const h = { ...authHeader, 'x-predio-id': String(pid) };
+      const [sr, tr] = await Promise.all([
+        fetch('/api/stats', { headers: h }).then(r=>r.json()),
+        fetch('/api/tickets', { headers: h }).then(r=>r.json()),
+      ]);
+      stats = sr; allTickets = tr;
+    } else {
+      // Múltiplos prédios — busca cada um e combina
+      const results = await Promise.all(selecionados.map(pid =>
+        fetch('/api/tickets', { headers: { ...authHeader, 'x-predio-id': String(pid) } }).then(r=>r.json())
+      ));
+      allTickets = results.flat().sort((a,b) => new Date(b.criado_em) - new Date(a.criado_em));
+      stats = {
+        aberto:    allTickets.filter(t=>t.status==='aberto').length,
+        andamento: allTickets.filter(t=>t.status==='em andamento').length,
+        resolvido: allTickets.filter(t=>t.status==='resolvido').length,
+        hoje:      allTickets.filter(t=>t.prazo&&t.prazo.split('T')[0]===hoje&&!['resolvido','cancelado'].includes(t.status)).length,
+      };
+    }
+  } catch(e) {
+    console.error('Erro ao recarregar filtros:', e);
+    stats = { aberto:0, andamento:0, resolvido:0, hoje:0 };
+    allTickets = [];
   }
   renderDashboard();
   renderList();
