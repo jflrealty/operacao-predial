@@ -599,10 +599,14 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         </div>
         <div style="margin-bottom:8px;">
           <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Relatório de tickets</div>
+          <button class="btn btn-primary" onclick="verRelatorioEmTela()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+            Ver em tela
+          </button>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <button class="btn btn-primary" onclick="exportar('excel')" style="display:flex;align-items:center;justify-content:center;gap:8px;">
+            <button class="btn btn-ghost" onclick="exportar('excel')" style="display:flex;align-items:center;justify-content:center;gap:8px;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
-              Excel (.xlsx)
+              Excel
             </button>
             <button class="btn btn-ghost" onclick="exportar('pdf')" style="display:flex;align-items:center;justify-content:center;gap:8px;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -614,14 +618,18 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         <div style="margin-bottom:8px;">
           <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">📊 Relatório de KPIs</div>
           <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.5;">Indicadores de produtividade por responsável, categoria e prédio — com taxa de resolução, tempo médio e cumprimento de SLA.</div>
+          <button class="btn btn-primary" onclick="verKPIEmTela()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px;background:#1A4F8A;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+            Ver KPIs em tela
+          </button>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <button class="btn btn-primary" onclick="exportarKPI('excel')" style="display:flex;align-items:center;justify-content:center;gap:8px;background:#1A4F8A;">
+            <button class="btn btn-ghost" onclick="exportarKPI('excel')" style="display:flex;align-items:center;justify-content:center;gap:8px;border-color:#1A4F8A;color:#1A4F8A;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
-              KPIs Excel
+              Excel
             </button>
             <button class="btn btn-ghost" onclick="exportarKPI('pdf')" style="display:flex;align-items:center;justify-content:center;gap:8px;border-color:#1A4F8A;color:#1A4F8A;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              KPIs PDF
+              PDF
             </button>
           </div>
         </div>
@@ -872,6 +880,17 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
   </div>
   <button onclick="instalarPWA()" style="background:#1A1917;color:#fff;border:none;padding:8px 14px;border-radius:var(--radius);font-family:var(--font);font-size:13px;cursor:pointer;white-space:nowrap;">Instalar</button>
   <button onclick="fecharBannerPWA()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:20px;padding:4px;">×</button>
+</div>
+
+<!-- OVERLAY: RELATÓRIO EM TELA -->
+<div class="overlay" id="overlay-relatorio" onclick="closeOverlay('overlay-relatorio',event)">
+  <div class="drawer" style="max-height:95vh;">
+    <div class="drawer-handle"></div>
+    <button onclick="closeOverlayById('overlay-relatorio')" style="position:absolute;top:12px;right:16px;background:var(--surface2);border:none;width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;color:var(--text2);display:flex;align-items:center;justify-content:center;z-index:10;">×</button>
+    <div class="drawer-body" id="relatorio-tela-body">
+      <div class="loader">Carregando...</div>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1767,6 +1786,192 @@ function renderTeam(){
 // ════════════════════════════════════════════════
 // RELATÓRIOS
 // ════════════════════════════════════════════════
+// ════════════════════════════════════════════════
+// RELATÓRIO EM TELA
+// ════════════════════════════════════════════════
+
+const STATUS_CORES = {
+  'aberto': '#92590A', 'em andamento': '#1A4F8A',
+  'resolvido': '#1E6B3C', 'cancelado': '#6B6860', 'feedback ao cliente': '#6B21A8'
+};
+const PRIO_CORES = { 'Urgente': '#7B0D1E', 'Alta': '#C0392B', 'Media': '#92590A', 'Baixa': '#1E6B3C' };
+
+function getFiltrosRelatorio() {
+  return {
+    status:   document.getElementById('rel-status')?.value || '',
+    prio:     document.getElementById('rel-prio')?.value || '',
+    de:       document.getElementById('rel-de')?.value || '',
+    ate:      document.getElementById('rel-ate')?.value || '',
+    predio:   document.getElementById('rel-predio')?.value || '',
+    resp:     document.getElementById('rel-responsavel')?.value || '',
+  };
+}
+
+async function verRelatorioEmTela() {
+  document.getElementById('overlay-relatorio').classList.add('open');
+  const body = document.getElementById('relatorio-tela-body');
+  body.innerHTML = '<div class="loader">Carregando...</div>';
+
+  const f = getFiltrosRelatorio();
+  const params = new URLSearchParams();
+  if (f.status) params.set('status', f.status);
+  if (f.prio)   params.set('prioridade', f.prio);
+  if (f.de)     params.set('de', f.de);
+  if (f.ate)    params.set('ate', f.ate);
+  if (f.predio) params.set('predio_id', f.predio);
+  if (f.resp)   params.set('responsavel_id', f.resp);
+
+  try {
+    const headers = { 'Authorization': 'Bearer '+token, ...(predioAtivo?{'x-predio-id':String(predioAtivo.id)}:{}) };
+    const r = await fetch('/api/relatorios/dados?' + params, { headers });
+    const tickets = await r.json();
+
+    const periodo = f.de||f.ate ? `${f.de||'inicio'} → ${f.ate||'hoje'}` : 'Todos os períodos';
+
+    body.innerHTML = `
+      <div style="font-size:18px;font-weight:700;margin-bottom:4px;">Relatório de Tickets</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:16px;">${periodo} · ${tickets.length} ticket(s)</div>
+      ${tickets.length === 0 ? '<div style="text-align:center;padding:40px;color:var(--text2);">Nenhum ticket encontrado.</div>' : `
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr style="background:var(--surface2);text-align:left;">
+              <th style="padding:8px 10px;font-size:11px;font-weight:600;color:var(--text2);">#</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:600;color:var(--text2);">Título</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:600;color:var(--text2);">Categoria</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:600;color:var(--text2);">Prédio</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:600;color:var(--text2);">Status</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:600;color:var(--text2);">Prioridade</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:600;color:var(--text2);">Responsável</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:600;color:var(--text2);">Prazo</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tickets.map((t,i) => `
+              <tr style="border-bottom:1px solid var(--border);background:${i%2===0?'var(--surface)':'var(--surface2)'};" onclick="openDetail(${t.id})" style="cursor:pointer;">
+                <td style="padding:8px 10px;color:var(--text3);">#${t.id}</td>
+                <td style="padding:8px 10px;font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.titulo}</td>
+                <td style="padding:8px 10px;color:var(--text2);">${t.categoria||'—'}</td>
+                <td style="padding:8px 10px;"><span style="background:var(--surface2);padding:2px 8px;border-radius:99px;font-size:11px;">${t.predio_nome||'—'}</span></td>
+                <td style="padding:8px 10px;"><span style="color:${STATUS_CORES[t.status]||'var(--text)'};font-weight:500;font-size:12px;">${t.status}</span></td>
+                <td style="padding:8px 10px;"><span style="color:${PRIO_CORES[t.prioridade]||'var(--text)'};font-weight:600;font-size:12px;">● ${t.prioridade||'—'}</span></td>
+                <td style="padding:8px 10px;color:var(--text2);">${t.responsavel_nome||'A definir'}</td>
+                <td style="padding:8px 10px;color:${t.prazo&&t.prazo.split('T')[0]<hoje?'var(--red)':'var(--text2)'};">${t.prazo?new Date(t.prazo).toLocaleDateString('pt-BR'):'—'}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`}`;
+  } catch(e) {
+    body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red);">Erro ao carregar relatório.</div>';
+  }
+}
+
+async function verKPIEmTela() {
+  document.getElementById('overlay-relatorio').classList.add('open');
+  const body = document.getElementById('relatorio-tela-body');
+  body.innerHTML = '<div class="loader">Carregando KPIs...</div>';
+
+  const f = getFiltrosRelatorio();
+  const params = new URLSearchParams();
+  if (f.de)     params.set('de', f.de);
+  if (f.ate)    params.set('ate', f.ate);
+  if (f.predio) params.set('predio_id', f.predio);
+  if (f.resp)   params.set('responsavel_id', f.resp);
+
+  try {
+    const headers = { 'Authorization': 'Bearer '+token, ...(predioAtivo?{'x-predio-id':String(predioAtivo.id)}:{}) };
+    const r = await fetch('/api/relatorios/kpi/dados?' + params, { headers });
+    const kpi = await r.json();
+    const res = kpi.resumo;
+
+    body.innerHTML = `
+      <div style="font-size:18px;font-weight:700;margin-bottom:4px;">Relatório de KPIs</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:16px;">${f.de||'início'} → ${f.ate||'hoje'} · ${res.total} tickets</div>
+
+      <!-- Cards resumo -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px;">
+        ${[
+          {l:'Total',v:res.total,c:'#1A4F8A'},
+          {l:'Resolvidos',v:res.resolvidos,c:'#1E6B3C'},
+          {l:'Em aberto',v:res.abertos,c:'#92590A'},
+          {l:'Atrasados',v:res.atrasados,c:res.atrasados>0?'#C0392B':'#1E6B3C'},
+        ].map(c=>`<div style="background:var(--surface2);border-radius:var(--radius);padding:12px 8px;text-align:center;">
+          <div style="font-size:22px;font-weight:700;color:${c.c};">${c.v}</div>
+          <div style="font-size:11px;color:var(--text2);">${c.l}</div>
+        </div>`).join('')}
+      </div>
+
+      <!-- Métricas secundárias -->
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin-bottom:20px;padding:10px 12px;background:var(--surface2);border-radius:var(--radius);">
+        <span>Taxa resolução: <strong>${res.taxaResolucao}%</strong></span>
+        <span>Tempo médio: <strong>${res.tempoMedioResolucao&&parseFloat(res.tempoMedioResolucao)>0?res.tempoMedioResolucao+' dias':'—'}</strong></span>
+        <span>SLA: <strong>${res.taxaSLA!=null?res.taxaSLA+'%':'—'}</strong></span>
+        <span>Urgentes: <strong>${res.urgentes}</strong></span>
+      </div>
+
+      <!-- Tabela responsáveis -->
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--border);">Por Responsável</div>
+      <div style="overflow-x:auto;margin-bottom:20px;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="background:var(--surface2);">
+            ${['Responsável','Total','Resolvidos','Taxa','Atrasados','Urgentes','T.Médio'].map(h=>`<th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text2);">${h}</th>`).join('')}
+          </tr></thead>
+          <tbody>
+            ${kpi.rankingResp.map((r,i)=>`<tr style="border-bottom:1px solid var(--border);background:${i%2===0?'var(--surface)':'var(--surface2)'};">
+              <td style="padding:6px 8px;font-weight:500;">${r.nome||'Não atribuído'}</td>
+              <td style="padding:6px 8px;">${r.total}</td>
+              <td style="padding:6px 8px;">${r.resolvidos}</td>
+              <td style="padding:6px 8px;color:${r.taxa>=80?'#1E6B3C':r.taxa<50?'#C0392B':'var(--text)'};font-weight:600;">${r.taxa}%</td>
+              <td style="padding:6px 8px;color:${r.atrasados>0?'#C0392B':'var(--text)'};">${r.atrasados}</td>
+              <td style="padding:6px 8px;">${r.urgentes}</td>
+              <td style="padding:6px 8px;color:var(--text2);">${r.tempoMedio&&parseFloat(r.tempoMedio)>0?r.tempoMedio+'d':'—'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tabela categorias -->
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--border);">Por Categoria</div>
+      <div style="overflow-x:auto;margin-bottom:20px;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="background:var(--surface2);">
+            ${['Categoria','Total','Resolvidos','Taxa'].map(h=>`<th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text2);">${h}</th>`).join('')}
+          </tr></thead>
+          <tbody>
+            ${kpi.rankingCat.map((c,i)=>`<tr style="border-bottom:1px solid var(--border);background:${i%2===0?'var(--surface)':'var(--surface2)'};">
+              <td style="padding:6px 8px;font-weight:500;">${c.cat}</td>
+              <td style="padding:6px 8px;">${c.total}</td>
+              <td style="padding:6px 8px;">${c.resolvidos}</td>
+              <td style="padding:6px 8px;color:${c.taxa>=80?'#1E6B3C':c.taxa<50?'#C0392B':'var(--text)'};font-weight:600;">${c.taxa}%</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      ${kpi.rankingPredio.length>0?`
+      <!-- Tabela prédios -->
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--border);">Por Prédio</div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="background:var(--surface2);">
+            ${['Prédio','Total','Resolvidos','Taxa','Atrasados'].map(h=>`<th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text2);">${h}</th>`).join('')}
+          </tr></thead>
+          <tbody>
+            ${kpi.rankingPredio.map((p,i)=>`<tr style="border-bottom:1px solid var(--border);background:${i%2===0?'var(--surface)':'var(--surface2)'};">
+              <td style="padding:6px 8px;font-weight:500;">${p.nome}</td>
+              <td style="padding:6px 8px;">${p.total}</td>
+              <td style="padding:6px 8px;">${p.resolvidos}</td>
+              <td style="padding:6px 8px;font-weight:600;color:${p.taxa>=80?'#1E6B3C':p.taxa<50?'#C0392B':'var(--text)'};">${p.taxa}%</td>
+              <td style="padding:6px 8px;color:${p.atrasados>0?'#C0392B':'var(--text)'};">${p.atrasados}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`:''}`
+  } catch(e) {
+    body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red);">Erro ao carregar KPIs.</div>';
+  }
+}
+
 function exportarKPI(tipo) {
   const de     = document.getElementById('rel-de')?.value || '';
   const ate    = document.getElementById('rel-ate')?.value || '';
