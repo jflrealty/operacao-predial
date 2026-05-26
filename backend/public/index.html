@@ -1017,7 +1017,7 @@ async function entrarNoApp() {
   document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdmin ? '' : 'none');
   document.querySelectorAll('.superadmin-only').forEach(el => el.style.display = isSuper ? '' : 'none');
 
-  await Promise.all([loadStats(), loadTickets(), loadMembros(), isAdmin && loadAllPredios()]);
+  await Promise.all([loadStats(), loadTickets(), loadMembros(), ...(isAdmin ? [loadAllPredios()] : [])]);
   carregarUnidadesForm();
   inicializarChipsPredio(); // cria chips uma única vez
   renderDashboard();
@@ -1088,11 +1088,21 @@ async function loadTickets() {
   catch(e) { allTickets = []; console.error('loadTickets:', e.message); }
 }
 async function loadMembros() {
-  try { membersList = await GET('/api/usuarios'); }
-  catch(e) { membersList = []; }
+  try {
+    const headers = { 'Authorization': 'Bearer '+token };
+    if (predioAtivo) headers['x-predio-id'] = predioAtivo.id;
+    const r = await fetch('/api/usuarios', { headers });
+    membersList = await r.json();
+    if (!Array.isArray(membersList)) membersList = [];
+  } catch(e) { membersList = []; console.error('loadMembros:', e.message); }
   populateMemberSelect();
 }
-async function loadAllPredios(){ allPredios  = await api('GET','/api/predios'); renderPrediosList(); }
+async function loadAllPredios(){
+  try {
+    allPredios = await api('GET','/api/predios');
+    renderPrediosList();
+  } catch(e) { console.error('loadAllPredios:', e.message); allPredios = []; }
+}
 
 function populateMemberSelect() {
   const el = document.getElementById('n-resp');
@@ -1299,7 +1309,7 @@ async function recarregarComFiltros() {
 }
 
 function renderDashboard() {
-  renderFiltrosPredio();
+  try { renderFiltrosPredio(); } catch(e) {}
   document.getElementById('s-aberto').textContent    = stats.aberto    ?? '—';
   document.getElementById('s-andamento').textContent = stats.andamento ?? '—';
   document.getElementById('s-resolvido').textContent = stats.resolvido ?? '—';
