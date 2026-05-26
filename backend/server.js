@@ -1178,134 +1178,130 @@ app.get('/api/relatorios/kpi/pdf', auth, async (req, res) => {
     const responsavelId = req.query.responsavel_id ? parseInt(req.query.responsavel_id) : (!isAdmin ? req.user.id : null);
     const { de, ate } = req.query;
     const kpi = await calcularKPIs(predioId, responsavelId, de, ate);
-    const { rows: predioRows } = predioId
-      ? await pool.query('SELECT nome FROM predios WHERE id=$1',[predioId])
-      : { rows: [{nome:'Todos os prédios'}] };
-    const predioNome = predioRows[0]?.nome || 'Todos os predios';
 
-    const doc = new PDFDocument({margin:40,size:'A4'});
+    let predioNome = 'Todos os predios';
+    if (predioId) {
+      const { rows: pr } = await pool.query('SELECT nome FROM predios WHERE id=$1',[predioId]);
+      predioNome = pr[0]?.nome || predioNome;
+    }
+
+    const doc = new PDFDocument({ margin:40, size:'A4', bufferPages:true });
     res.setHeader('Content-Type','application/pdf');
     res.setHeader('Content-Disposition',`attachment; filename="kpi-${Date.now()}.pdf"`);
     doc.pipe(res);
 
-    // Header
-    doc.rect(0,0,doc.page.width,70).fill('#1A1917');
-    doc.fillColor('#fff').fontSize(18).font('Helvetica-Bold').text('Relatorio de KPIs',40,18);
-    doc.fontSize(11).font('Helvetica').text(`${predioNome}  ·  ${de||'inicio'} → ${ate||'hoje'}`,40,44);
+    const W = doc.page.width;
+    const M = 40; // margin
+    const CW = W - M*2; // content width
 
-    doc.fillColor('#1A1917').moveDown(1.5);
-    doc.fontSize(10).fillColor('#6B6860').text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`,{align:'right'});
+    // ── HEADER ──────────────────────────────────────────
+    doc.rect(0, 0, W, 66).fill('#1A1917');
+    doc.fillColor('#FFFFFF').fontSize(20).font('Helvetica-Bold').text('RELATORIO DE KPIs', M, 16);
+    const periodo = `${predioNome}  |  ${de||'inicio'} ate ${ate||'hoje'}`;
+    doc.fontSize(10).font('Helvetica').text(periodo, M, 42);
+    doc.y = 80;
 
-    // Resumo geral em cards
-    doc.moveDown(0.5);
+    // Data de geração
+    doc.fontSize(9).fillColor('#6B6860').text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, M, 80, {width:CW, align:'right'});
+    doc.y = 100;
+
+    // ── CARDS DE RESUMO ──────────────────────────────────
     const r = kpi.resumo;
-    const cardW = (doc.page.width-80)/4;
-    const cardY = doc.y;
+    const cardW = CW / 4 - 4;
     const cardData = [
-      {label:'Total',val:r.total,color:'#1A4F8A'},
-      {label:'Resolvidos',val:r.resolvidos,color:'#1E6B3C'},
-      {label:'Em aberto',val:r.abertos,color:'#92590A'},
-      {label:'Atrasados',val:r.atrasados,color:r.atrasados>0?'#C0392B':'#1E6B3C'},
+      { label:'Total', val: r.total, color:'#1A4F8A' },
+      { label:'Resolvidos', val: r.resolvidos, color:'#1E6B3C' },
+      { label:'Em aberto', val: r.abertos, color:'#92590A' },
+      { label:'Atrasados', val: r.atrasados, color: r.atrasados > 0 ? '#C0392B' : '#1E6B3C' },
     ];
-    cardData.forEach((c,i) => {
-      const x = 40+i*cardW;
-      doc.rect(x, cardY, cardW-8, 60).fill('#F9F9F7').stroke('#E2DED6');
-      doc.fillColor(c.color).fontSize(24).font('Helvetica-Bold').text(String(c.val), x+8, cardY+8, {width:cardW-16,align:'center'});
-      doc.fillColor('#6B6860').fontSize(9).font('Helvetica').text(c.label, x+8, cardY+38, {width:cardW-16,align:'center'});
+    const cy = doc.y;
+    cardData.forEach((c, i) => {
+      const x = M + i * (cardW + 5);
+      doc.rect(x, cy, cardW, 56).fill('#F9F9F7').stroke('#E2DED6');
+      doc.fillColor(c.color).fontSize(26).font('Helvetica-Bold')
+         .text(String(c.val), x, cy + 8, { width: cardW, align:'center' });
+      doc.fillColor('#6B6860').fontSize(9).font('Helvetica')
+         .text(c.label, x, cy + 38, { width: cardW, align:'center' });
     });
+    doc.y = cy + 66;
 
-    doc.y = cardY + 72;
-    // Métricas secundárias
-    const metaLine = [
-      `Taxa de resolução: ${r.taxaResolucao}%`,
-      `Tempo médio: ${r.tempoMedioResolucao||'—'} dias`,
-      `SLA: ${r.taxaSLA!=null?r.taxaSLA+'%':'—'}`,
-      `Urgentes: ${r.urgentes}`,
-    ].join('   ·   ');
-    doc.fontSize(10).fillColor('#1A1917').text(metaLine, 40, doc.y, {width:doc.page.width-80});
-    doc.moveDown(1);
+    // Linha de métricas
+    const tempoStr = (r.tempoMedioResolucao && parseFloat(r.tempoMedioResolucao) > 0) ? r.tempoMedioResolucao + ' dias' : '--';
+    const slaStr = r.taxaSLA != null ? r.taxaSLA + '%' : '--';
+    doc.fontSize(9).fillColor('#1A1917').font('Helvetica')
+       .text(`Taxa resolucao: ${r.taxaResolucao}%   Tempo medio: ${tempoStr}   SLA: ${slaStr}   Urgentes: ${r.urgentes}`, M, doc.y, { width: CW });
+    doc.y += 20;
 
-    // Tabela por responsável
-    doc.fontSize(12).font('Helvetica-Bold').fillColor('#1A1917').text('Desempenho por Responsavel');
-    doc.moveDown(0.3);
-    const colsR = [140,50,60,55,60,55,80];
-    const hdrsR = ['Responsável','Total','Resolvidos','Taxa %','Atrasados','Urgentes','T.Médio(dias)'];
-    let tx = 40;
-    doc.rect(40, doc.y, doc.page.width-80, 18).fill('#1A1917');
-    hdrsR.forEach((h,i) => {
-      doc.fillColor('#fff').fontSize(8).font('Helvetica-Bold').text(h, tx+2, doc.y-14, {width:colsR[i]-4,align:'center'});
-      tx += colsR[i];
-    });
-    doc.y += 4;
-    kpi.rankingResp.slice(0,15).forEach((r,idx) => {
-      if (doc.y > doc.page.height-100) doc.addPage();
-      const ry = doc.y;
-      doc.rect(40, ry, doc.page.width-80, 16).fill(idx%2===0?'#F9F9F7':'#FFFFFF').stroke('#E2DED6');
-      const vals = [r.nome||'Não atribuído',r.total,r.resolvidos,r.taxa+'%',r.atrasados,r.urgentes,r.tempoMedio||'—'];
-      let vx=40;
-      vals.forEach((v,i) => {
-        const isRed = (i===4&&r.atrasados>0)||(i===3&&r.taxa<50);
-        doc.fillColor(isRed?'#C0392B':'#1A1917').fontSize(8).font(i===0?'Helvetica-Bold':'Helvetica')
-          .text(String(v), vx+2, ry+4, {width:colsR[i]-4,align:i===0?'left':'center'});
-        vx += colsR[i];
+    // ── HELPER: tabela ────────────────────────────────────
+    function drawTableHeader(headers, cols, y) {
+      doc.rect(M, y, CW, 18).fill('#1A1917');
+      let x = M;
+      headers.forEach((h, i) => {
+        doc.fillColor('#FFFFFF').fontSize(8).font('Helvetica-Bold')
+           .text(h, x + 2, y + 5, { width: cols[i] - 4, align: i === 0 ? 'left' : 'center' });
+        x += cols[i];
       });
-      doc.y = ry+18;
+      return y + 20;
+    }
+
+    function drawTableRow(vals, cols, y, idx) {
+      const bg = idx % 2 === 0 ? '#F9F9F7' : '#FFFFFF';
+      doc.rect(M, y, CW, 16).fill(bg).stroke('#E2DED6');
+      let x = M;
+      vals.forEach((v, i) => {
+        const isRed = (typeof v === 'string' && v.endsWith('%') && parseInt(v) < 50 && i > 0) ||
+                      (i === 4 && parseInt(v) > 0);
+        doc.fillColor(isRed ? '#C0392B' : '#1A1917')
+           .fontSize(8).font(i === 0 ? 'Helvetica-Bold' : 'Helvetica')
+           .text(String(v), x + 2, y + 4, { width: cols[i] - 4, align: i === 0 ? 'left' : 'center' });
+        x += cols[i];
+      });
+      return y + 18;
+    }
+
+    function sectionTitle(title) {
+      if (doc.y > doc.page.height - 120) doc.addPage();
+      doc.y += 8;
+      doc.rect(M, doc.y, CW, 22).fill('#E8E4DC');
+      doc.fillColor('#1A1917').fontSize(11).font('Helvetica-Bold')
+         .text(title, M + 8, doc.y + 6);
+      doc.y += 28;
+    }
+
+    // ── TABELA: RESPONSAVEIS ─────────────────────────────
+    sectionTitle('DESEMPENHO POR RESPONSAVEL');
+    const colsR = [140, 48, 58, 52, 56, 52, 74];
+    const hdrsR = ['Responsavel','Total','Resolvidos','Taxa %','Atrasados','Urgentes','T.Medio(dias)'];
+    let ty = drawTableHeader(hdrsR, colsR, doc.y);
+    doc.y = ty;
+    kpi.rankingResp.slice(0, 15).forEach((r, idx) => {
+      if (doc.y > doc.page.height - 60) { doc.addPage(); }
+      const tempoMed = (r.tempoMedio && parseFloat(r.tempoMedio) > 0) ? r.tempoMedio : '--';
+      const vals = [r.nome||'Nao atribuido', r.total, r.resolvidos, r.taxa+'%', r.atrasados, r.urgentes, tempoMed];
+      doc.y = drawTableRow(vals, colsR, doc.y, idx);
     });
 
-    doc.moveDown(1);
-    // Tabela por categoria
-    if (doc.y > doc.page.height-150) doc.addPage();
-    doc.fontSize(12).font('Helvetica-Bold').fillColor('#1A1917').text('Tickets por Categoria');
-    doc.moveDown(0.3);
-    const colsC = [220,70,80,70];
+    // ── TABELA: CATEGORIAS ───────────────────────────────
+    sectionTitle('TICKETS POR CATEGORIA');
+    const colsC = [220, 70, 80, 110];
     const hdrsC = ['Categoria','Total','Resolvidos','Taxa %'];
-    tx = 40;
-    doc.rect(40, doc.y, doc.page.width-80, 18).fill('#1A1917');
-    hdrsC.forEach((h,i) => {
-      doc.fillColor('#fff').fontSize(8).font('Helvetica-Bold').text(h, tx+2, doc.y-14, {width:colsC[i]-4,align:i===0?'left':'center'});
-      tx += colsC[i];
-    });
-    doc.y += 4;
-    kpi.rankingCat.forEach((c,idx) => {
-      if (doc.y > doc.page.height-60) doc.addPage();
-      const cy = doc.y;
-      doc.rect(40,cy,doc.page.width-80,16).fill(idx%2===0?'#F9F9F7':'#FFFFFF').stroke('#E2DED6');
-      const vals=[c.cat,c.total,c.resolvidos,c.taxa+'%'];
-      let vx=40;
-      vals.forEach((v,i)=>{
-        doc.fillColor('#1A1917').fontSize(8).font(i===0?'Helvetica-Bold':'Helvetica')
-          .text(String(v),vx+2,cy+4,{width:colsC[i]-4,align:i===0?'left':'center'});
-        vx+=colsC[i];
-      });
-      doc.y=cy+18;
+    ty = drawTableHeader(hdrsC, colsC, doc.y);
+    doc.y = ty;
+    kpi.rankingCat.forEach((c, idx) => {
+      if (doc.y > doc.page.height - 60) { doc.addPage(); }
+      doc.y = drawTableRow([c.cat, c.total, c.resolvidos, c.taxa+'%'], colsC, doc.y, idx);
     });
 
-    // Tabela por prédio se consolidado
+    // ── TABELA: PREDIOS (consolidado) ────────────────────
     if (kpi.rankingPredio.length > 0) {
-      doc.moveDown(1);
-      if (doc.y > doc.page.height-150) doc.addPage();
-      doc.fontSize(12).font('Helvetica-Bold').fillColor('#1A1917').text('Tickets por Predio');
-      doc.moveDown(0.3);
-      const colsP=[180,70,80,70,70];
-      const hdrsP=['Prédio','Total','Resolvidos','Taxa %','Atrasados'];
-      tx=40;
-      doc.rect(40,doc.y,doc.page.width-80,18).fill('#1A1917');
-      hdrsP.forEach((h,i)=>{
-        doc.fillColor('#fff').fontSize(8).font('Helvetica-Bold').text(h,tx+2,doc.y-14,{width:colsP[i]-4,align:i===0?'left':'center'});
-        tx+=colsP[i];
-      });
-      doc.y+=4;
-      kpi.rankingPredio.forEach((p,idx)=>{
-        const py=doc.y;
-        doc.rect(40,py,doc.page.width-80,16).fill(idx%2===0?'#F9F9F7':'#FFFFFF').stroke('#E2DED6');
-        const vals=[p.nome,p.total,p.resolvidos,p.taxa+'%',p.atrasados];
-        let vx=40;
-        vals.forEach((v,i)=>{
-          doc.fillColor('#1A1917').fontSize(8).font(i===0?'Helvetica-Bold':'Helvetica')
-            .text(String(v),vx+2,py+4,{width:colsP[i]-4,align:i===0?'left':'center'});
-          vx+=colsP[i];
-        });
-        doc.y=py+18;
+      sectionTitle('TICKETS POR PREDIO');
+      const colsP = [180, 70, 80, 80, 70];
+      const hdrsP = ['Predio','Total','Resolvidos','Taxa %','Atrasados'];
+      ty = drawTableHeader(hdrsP, colsP, doc.y);
+      doc.y = ty;
+      kpi.rankingPredio.forEach((p, idx) => {
+        if (doc.y > doc.page.height - 60) { doc.addPage(); }
+        doc.y = drawTableRow([p.nome, p.total, p.resolvidos, p.taxa+'%', p.atrasados], colsP, doc.y, idx);
       });
     }
 
