@@ -1160,8 +1160,8 @@ function renderFiltrosPredio() {
     if (!chipsEl.children.length) {
       const predios = currentUser.predios || [];
       chipsEl.innerHTML = `
-        <button class="chip active" id="chip-todos" onclick="filtrarPorPredio(null,this)">Todos</button>
-        ${predios.map(p => `<button class="chip" id="chip-${p.id}" onclick="filtrarPorPredio(${p.id},this)">${p.nome}</button>`).join('')}`;
+        <button class="chip active" id="chip-todos" data-predio-id="" onclick="filtrarPorPredio(null,this)">Todos</button>
+        ${predios.map(p => `<button class="chip" id="chip-${p.id}" data-predio-id="${p.id}" onclick="filtrarPorPredio(${p.id},this)">${p.nome}</button>`).join('')}`;
     }
     // Restaura estado ativo sem recriar
     chipsEl.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
@@ -1173,8 +1173,6 @@ function renderFiltrosPredio() {
   }
 }
 
-let filtroPredioAtual = null;
-
 function renderFiltrosPredioTickets() {
   const container = document.getElementById('superadmin-predio-filter-tickets');
   const chipsEl   = document.getElementById('predio-filter-chips-tickets');
@@ -1184,8 +1182,8 @@ function renderFiltrosPredioTickets() {
     if (!chipsEl.children.length) {
       const predios = currentUser.predios||[];
       chipsEl.innerHTML=`
-        <button class="chip" id="chipt-todos" onclick="filtrarPorPredio(null,this)">Todos</button>
-        ${predios.map(p=>`<button class="chip" id="chipt-${p.id}" onclick="filtrarPorPredio(${p.id},this)">${p.nome}</button>`).join('')}`;
+        <button class="chip" id="chipt-todos" data-predio-id="" onclick="filtrarPorPredio(null,this)">Todos</button>
+        ${predios.map(p=>`<button class="chip" id="chipt-${p.id}" data-predio-id="${p.id}" onclick="filtrarPorPredio(${p.id},this)">${p.nome}</button>`).join('')}`;
     }
     chipsEl.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
     const activeId = filtroPredioAtual ? `chipt-${filtroPredioAtual}` : 'chipt-todos';
@@ -1194,19 +1192,85 @@ function renderFiltrosPredioTickets() {
   } else { container.style.display='none'; }
 }
 
+// Set de prédios selecionados nos filtros (multi-select)
+let filtrosPrediosSelecionados = new Set();
+
 async function filtrarPorPredio(predioId, el) {
-  filtroPredioAtual = predioId;
-  document.querySelectorAll('#predio-filter-chips .chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  // Recarrega stats e tickets com filtro
-  if (predioId) {
-    const r = await fetch(`/api/stats`, { headers: { 'Authorization':'Bearer '+token, 'x-predio-id': predioId }});
-    stats = await r.json();
-    const rt = await fetch(`/api/tickets?predio_id=${predioId}`, { headers: { 'Authorization':'Bearer '+token }});
-    allTickets = await rt.json();
+  if (predioId === null) {
+    // "Todos" — limpa seleção
+    filtrosPrediosSelecionados.clear();
   } else {
-    stats = await GET('/api/stats');
-    allTickets = await GET('/api/tickets');
+    // Toggle do prédio clicado
+    if (filtrosPrediosSelecionados.has(predioId)) {
+      filtrosPrediosSelecionados.delete(predioId);
+    } else {
+      filtrosPrediosSelecionados.add(predioId);
+    }
+  }
+
+  // Atualiza visual dos chips (dashboard)
+  atualizarChipsDashboard();
+  atualizarChipsTickets();
+
+  // Carrega dados
+  await recarregarComFiltros();
+}
+
+function atualizarChipsDashboard() {
+  const chipsEl = document.getElementById('predio-filter-chips');
+  if (!chipsEl) return;
+  chipsEl.querySelectorAll('.chip').forEach(c => {
+    const cid = c.dataset.predioId;
+    if (!cid) {
+      // chip "Todos"
+      c.classList.toggle('active', filtrosPrediosSelecionados.size === 0);
+    } else {
+      c.classList.toggle('active', filtrosPrediosSelecionados.has(parseInt(cid)));
+    }
+  });
+}
+
+function atualizarChipsTickets() {
+  const chipsEl = document.getElementById('predio-filter-chips-tickets');
+  if (!chipsEl) return;
+  chipsEl.querySelectorAll('.chip').forEach(c => {
+    const cid = c.dataset.predioId;
+    if (!cid) {
+      c.classList.toggle('active', filtrosPrediosSelecionados.size === 0);
+    } else {
+      c.classList.toggle('active', filtrosPrediosSelecionados.has(parseInt(cid)));
+    }
+  });
+}
+
+async function recarregarComFiltros() {
+  const selecionados = [...filtrosPrediosSelecionados];
+
+  if (selecionados.length === 0) {
+    // Sem filtro — carrega tudo
+    const [s, t] = await Promise.all([GET('/api/stats'), GET('/api/tickets')]);
+    stats = s; allTickets = t;
+  } else if (selecionados.length === 1) {
+    // Um prédio — usa x-predio-id
+    const pid = selecionados[0];
+    const [sr, tr] = await Promise.all([
+      fetch('/api/stats', { headers: { 'Authorization':'Bearer '+token, 'x-predio-id': pid }}).then(r=>r.json()),
+      fetch(`/api/tickets?predio_id=${pid}`, { headers: { 'Authorization':'Bearer '+token }}).then(r=>r.json()),
+    ]);
+    stats = sr; allTickets = tr;
+  } else {
+    // Múltiplos prédios — busca cada um e combina
+    const results = await Promise.all(selecionados.map(pid =>
+      fetch(`/api/tickets?predio_id=${pid}`, { headers: { 'Authorization':'Bearer '+token }}).then(r=>r.json())
+    ));
+    allTickets = results.flat().sort((a,b) => new Date(b.criado_em) - new Date(a.criado_em));
+    // Stats combinados dos tickets em memória
+    stats = {
+      aberto:    allTickets.filter(t=>t.status==='aberto').length,
+      andamento: allTickets.filter(t=>t.status==='em andamento').length,
+      resolvido: allTickets.filter(t=>t.status==='resolvido').length,
+      hoje:      allTickets.filter(t=>t.prazo&&t.prazo.split('T')[0]===hoje&&!['resolvido','cancelado'].includes(t.status)).length,
+    };
   }
   renderDashboard();
   renderList();
