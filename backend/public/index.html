@@ -301,7 +301,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 <div id="app">
   <div class="topbar">
     <div class="topbar-left">
-      <div class="topbar-brand">⬡ JFL Inc</div>
+      <div class="topbar-brand" onclick="showScreen('dashboard')" style="cursor:pointer;display:flex;align-items:center;gap:0;"><span style="font-family:Georgia,serif;font-weight:700;font-size:15px;background:#7B2D2D;color:#FDFAF5;padding:2px 7px;border-radius:5px;letter-spacing:.5px;">JFL</span><span style="font-family:Georgia,serif;font-weight:700;font-size:15px;color:var(--text);padding-left:6px;">Inc</span></div>
       <button class="predio-switcher" onclick="showPredioSelector()" id="predio-switcher-btn" style="border-color:var(--accent);color:var(--accent);">
         <span id="predio-nome-ativo" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 16l5-5 5 5"/><path d="M7 8l5 5 5-5" opacity=".4"/></svg>
@@ -331,9 +331,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
   <div class="layout">
     <!-- SIDEBAR -->
     <div class="sidebar">
-      <div style="padding:4px 12px 20px;display:flex;align-items:center;gap:10px;">
-        <svg width="30" height="30" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="7" fill="#7B2D2D"/><text x="16" y="22" text-anchor="middle" font-family="Georgia,serif" font-size="15" font-weight="700" fill="#FDFAF5">JFL</text></svg>
-        <div style="font-family:Georgia,serif;font-size:15px;font-weight:700;color:#fff;letter-spacing:-.3px;">JFL Inc</div>
+      <div style="padding:4px 12px 20px;display:flex;align-items:center;gap:0;cursor:pointer;" onclick="showScreen('dashboard')">
+        <span style="font-family:Georgia,serif;font-weight:700;font-size:16px;background:#7B2D2D;color:#FDFAF5;padding:3px 8px;border-radius:6px;letter-spacing:.5px;border:1px solid rgba(255,255,255,.2);">JFL</span>
+        <span style="font-family:Georgia,serif;font-weight:700;font-size:16px;color:rgba(255,255,255,.85);padding-left:8px;letter-spacing:-.2px;">Inc</span>
       </div>
       <div class="nav-section" style="margin-top:0;">Visão</div>
       <button class="nav-item active" onclick="showScreen('dashboard',this)">
