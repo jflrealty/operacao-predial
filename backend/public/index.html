@@ -147,6 +147,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .prio-Alta{background:var(--red);}
 .prio-Média{background:var(--amber);}
 .prio-Baixa{background:var(--green);}
+.prio-Urgente{background:#7B0D1E;animation:pulse-urgente 1.5s infinite;}
+@keyframes pulse-urgente{0%,100%{opacity:1;}50%{opacity:.5;}}
 
 .section-title{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.07em;margin:24px 0 12px;}
 .section-title:first-child{margin-top:0;}
@@ -400,6 +402,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
                 <option value="Alta">Alta</option>
                 <option value="Média">Média</option>
                 <option value="Baixa">Baixa</option>
+                <option value="Urgente">Urgente</option>
               </select>
             </div>
             <div class="field" style="margin:0;"><label>Categoria</label>
@@ -436,6 +439,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
           <button class="admin-tab active" id="atab-usuarios" onclick="showAdminTab('usuarios',this)" style="flex:1;padding:9px;border:none;border-radius:var(--radius);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text);transition:all .15s;">👥 Usuários</button>
           <button class="admin-tab" id="atab-predios" onclick="showAdminTab('predios',this)" style="flex:1;padding:9px;border:none;border-radius:var(--radius);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;background:none;color:var(--text2);transition:all .15s;">🏢 Prédios</button>
           <button class="admin-tab" id="atab-kpis" onclick="showAdminTab('kpis',this)" style="flex:1;padding:9px;border:none;border-radius:var(--radius);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;background:none;color:var(--text2);transition:all .15s;">📊 KPIs</button>
+          <button class="admin-tab" id="atab-categorias" onclick="showAdminTab('categorias',this)" style="flex:1;padding:9px;border:none;border-radius:var(--radius);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;background:none;color:var(--text2);transition:all .15s;">🏷️ Cats</button>
         </div>
 
         <!-- ABA: USUÁRIOS -->
@@ -467,6 +471,21 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
           <div style="font-size:14px;font-weight:600;margin-bottom:16px;">Indicadores por prédio</div>
           <div id="admin-kpis-list"><div class="loader">Carregando...</div></div>
         </div>
+
+        <!-- ABA: CATEGORIAS -->
+        <div id="admin-tab-categorias" style="display:none;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <div>
+              <div style="font-size:14px;font-weight:600;">Categorias de ticket</div>
+              <div style="font-size:12px;color:var(--text2);margin-top:2px;">Personalize por prédio</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:16px;">
+            <input type="text" id="cat-nova-nome" placeholder="Nome da nova categoria..." class="search-input" style="flex:1;">
+            <button class="btn btn-ghost btn-sm" onclick="adicionarCategoria()" style="white-space:nowrap;">+ Adicionar</button>
+          </div>
+          <div id="admin-cats-list"><div class="loader">Carregando...</div></div>
+        </div>
       </div>
 
       <!-- TEAM (mantido para compatibilidade, oculto) -->
@@ -480,6 +499,14 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:16px;">
           <div style="font-size:14px;font-weight:500;margin-bottom:16px;">Filtros</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="field admin-only" id="rel-predio-field" style="margin:0;display:none;">
+              <label>Prédio</label>
+              <select id="rel-predio"><option value="">Todos</option></select>
+            </div>
+            <div class="field admin-only" id="rel-resp-field" style="margin:0;display:none;">
+              <label>Responsável</label>
+              <select id="rel-responsavel"><option value="">Todos</option></select>
+            </div>
             <div class="field" style="margin:0;">
               <label>Status</label>
               <select id="rel-status">
@@ -488,12 +515,14 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
                 <option value="em andamento">Em andamento</option>
                 <option value="resolvido">Resolvido</option>
                 <option value="feedback ao cliente">Feedback</option>
+                <option value="cancelado">Cancelado</option>
               </select>
             </div>
             <div class="field" style="margin:0;">
               <label>Prioridade</label>
               <select id="rel-prio">
                 <option value="">Todas</option>
+                <option value="Urgente">Urgente</option>
                 <option value="Alta">Alta</option>
                 <option value="Média">Média</option>
                 <option value="Baixa">Baixa</option>
@@ -637,7 +666,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="field"><label>Prioridade</label>
-          <select id="n-prio"><option>Baixa</option><option selected>Média</option><option>Alta</option></select>
+          <select id="n-prio"><option>Baixa</option><option selected>Média</option><option>Alta</option><option>Urgente</option></select>
         </div>
         <div class="field"><label>Prazo previsto</label><input type="date" id="n-prazo"></div>
       </div>
@@ -1226,6 +1255,11 @@ async function openDetail(id) {
           ↺ Reabrir
         </button>
       ` : ''}
+      ${currentUser?.role === 'superadmin' ? `
+        <button onclick="apagarTicket(${id})" style="width:100%;margin-top:8px;padding:10px 16px;border-radius:var(--radius);border:1px solid #fca5a5;background:#fef2f2;color:var(--red);font-family:var(--font);font-size:13px;cursor:pointer;">
+          🗑 Apagar ticket permanentemente
+        </button>
+      ` : ''}
     </div>
     <div style="margin-top:16px;">
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Registrar update</div>
@@ -1275,6 +1309,16 @@ async function openDetail(id) {
   document.getElementById('detail-body').innerHTML = detailHtml.replaceAll('TICKETID', String(id));
   // Carrega fotos assincronamente após render
   setTimeout(() => carregarFotos(id), 50);
+}
+
+async function apagarTicket(id) {
+  if (!confirm('Apagar este ticket permanentemente? Esta ação não pode ser desfeita.')) return;
+  try {
+    await DEL(`/api/tickets/${id}`);
+    closeOverlayById('overlay-detail');
+    await loadStats(); await loadTickets(); renderDashboard(); renderList();
+    showToast('Ticket apagado');
+  } catch(e) { showToast('Erro: '+e.message); }
 }
 
 async function updateStatus(id,status) {
@@ -1401,11 +1445,36 @@ function renderTeam(){
 // ════════════════════════════════════════════════
 // RELATÓRIOS
 // ════════════════════════════════════════════════
+function inicializarFiltrosRelatorio() {
+  const isAdmin = currentUser && ['admin','superadmin'].includes(currentUser.role);
+  // Mostra filtros de prédio e responsável só para admins
+  ['rel-predio-field','rel-resp-field'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isAdmin ? 'block' : 'none';
+  });
+  if (!isAdmin) return;
+  // Preenche select de prédios
+  const predioSel = document.getElementById('rel-predio');
+  if (predioSel && currentUser.predios?.length) {
+    predioSel.innerHTML = '<option value="">Todos</option>' +
+      currentUser.predios.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+  }
+  // Preenche select de responsáveis
+  const respSel = document.getElementById('rel-responsavel');
+  if (respSel) {
+    respSel.innerHTML = '<option value="">Todos</option>' +
+      (todosUsuarios.length ? todosUsuarios : membersList)
+        .map(u => `<option value="${u.id}">${u.nome||u.email}</option>`).join('');
+  }
+}
+
 function exportar(tipo) {
   const status = document.getElementById('rel-status').value;
   const prio   = document.getElementById('rel-prio').value;
   const de     = document.getElementById('rel-de').value;
   const ate    = document.getElementById('rel-ate').value;
+  const predio = document.getElementById('rel-predio')?.value || '';
+  const resp   = document.getElementById('rel-responsavel')?.value || '';
   const msg    = document.getElementById('rel-msg');
   msg.textContent = 'Gerando arquivo...'; msg.className = '';
   const params = new URLSearchParams();
@@ -1413,6 +1482,8 @@ function exportar(tipo) {
   if (prio)   params.set('prioridade', prio);
   if (de)     params.set('de', de);
   if (ate)    params.set('ate', ate);
+  if (predio) params.set('predio_id', predio);
+  if (resp)   params.set('responsavel_id', resp);
   fetch(`/api/relatorios/${tipo}?${params}`, {
     headers: { 'Authorization':'Bearer '+token, ...(predioAtivo ? {'x-predio-id': String(predioAtivo.id)} : {}) }
   }).then(r => {
@@ -1736,7 +1807,7 @@ async function sugerirPrazoSLA(categoria) {
 let todosUsuarios = [];
 
 function showAdminTab(tab, el) {
-  ['usuarios','predios','kpis'].forEach(t => {
+  ['usuarios','predios','kpis','categorias'].forEach(t => {
     document.getElementById('admin-tab-'+t).style.display = t===tab ? 'block' : 'none';
   });
   document.querySelectorAll('.admin-tab').forEach(b => {
@@ -1746,9 +1817,46 @@ function showAdminTab(tab, el) {
   el.style.background = 'var(--surface)';
   el.style.color = 'var(--text)';
 
-  if (tab==='usuarios') carregarTodosUsuarios();
-  if (tab==='predios')  carregarPrediosAdmin();
-  if (tab==='kpis')     carregarKPIs();
+  if (tab==='usuarios')   carregarTodosUsuarios();
+  if (tab==='predios')    carregarPrediosAdmin();
+  if (tab==='kpis')       carregarKPIs();
+  if (tab==='categorias') carregarCategoriasAdmin();
+}
+
+// ── CATEGORIAS ────────────────────────────────
+async function carregarCategoriasAdmin() {
+  const el = document.getElementById('admin-cats-list');
+  if (!el) return;
+  el.innerHTML = '<div class="loader">Carregando...</div>';
+  try {
+    const cats = await GET('/api/categorias');
+    if (!cats.length) { el.innerHTML = emptyState('Nenhuma categoria cadastrada.'); return; }
+    el.innerHTML = cats.map(c => `
+      <div class="member-card">
+        <div style="font-size:14px;font-weight:500;">${c.nome}</div>
+        ${c.id ? `<button class="btn btn-ghost btn-sm btn-danger" onclick="removerCategoria(${c.id})">Remover</button>` : '<span style="font-size:11px;color:var(--text3);">padrão</span>'}
+      </div>`).join('');
+  } catch(e) { el.innerHTML = emptyState('Erro ao carregar.'); }
+}
+
+async function adicionarCategoria() {
+  const nome = document.getElementById('cat-nova-nome')?.value.trim();
+  if (!nome) return;
+  try {
+    await POST('/api/categorias', { nome });
+    document.getElementById('cat-nova-nome').value = '';
+    await carregarCategoriasAdmin();
+    showToast('Categoria adicionada!');
+  } catch(e) { showToast('Erro: '+e.message); }
+}
+
+async function removerCategoria(id) {
+  if (!confirm('Remover esta categoria?')) return;
+  try {
+    await DEL(`/api/categorias/${id}`);
+    await carregarCategoriasAdmin();
+    showToast('Categoria removida');
+  } catch(e) { showToast('Erro: '+e.message); }
 }
 
 async function carregarTodosUsuarios() {
@@ -1971,7 +2079,7 @@ function showScreen(name,el){
   if(name==='tickets')    { renderList(); renderFiltrosPredioTickets(); }
   if(name==='admin')      { carregarTodosUsuarios(); }
   if(name==='predios')    renderPrediosList();
-  if(name==='relatorios') { /* static screen */ }
+  if(name==='relatorios') { inicializarFiltrosRelatorio(); }
   if(name==='perfil')     carregarPerfil();
   if(name==='config')     { carregarSLA(); }
 }
