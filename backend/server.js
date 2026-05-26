@@ -529,13 +529,17 @@ app.post('/api/tickets', auth, comPredio, async (req, res) => {
   } catch(e) { console.error(e); res.status(500).json({ erro: 'Erro interno' }); }
 });
 
-app.patch('/api/tickets/:id/status', auth, comPredio, async (req, res) => {
+app.patch('/api/tickets/:id/status', auth, async (req, res) => {
+  const pid = parseInt(req.headers['x-predio-id']) || null;
+  const isAdmin = ['superadmin','admin'].includes(req.user.role);
   const { status } = req.body;
   const validos = ['aberto','em andamento','feedback ao cliente','resolvido','cancelado'];
   if (!validos.includes(status)) return res.status(400).json({ erro: 'Status inválido' });
+  const whereClause = isAdmin && !pid ? 'id=$2' : 'id=$2 AND predio_id=$3';
+  const params = isAdmin && !pid ? [status, req.params.id] : [status, req.params.id, pid];
   const { rows } = await pool.query(
-    'UPDATE tickets SET status=$1,atualizado_em=NOW() WHERE id=$2 AND predio_id=$3 RETURNING *',
-    [status,req.params.id,req.predio_id]
+    `UPDATE tickets SET status=$1,atualizado_em=NOW() WHERE ${whereClause} RETURNING *`,
+    params
   );
   if (!rows[0]) return res.status(404).json({ erro: 'Não encontrado' });
   const t = rows[0];
@@ -552,17 +556,27 @@ app.patch('/api/tickets/:id/status', auth, comPredio, async (req, res) => {
 // HISTÓRICO
 // ══════════════════════════════════════════════════════════════
 
-app.get('/api/tickets/:id/historico', auth, comPredio, async (req, res) => {
-  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',[req.params.id,req.predio_id]);
+app.get('/api/tickets/:id/historico', auth, async (req, res) => {
+  const pid = parseInt(req.headers['x-predio-id']) || null;
+  const isAdmin = ['superadmin','admin'].includes(req.user.role);
+  const { rows: tk } = await pool.query(
+    isAdmin && !pid ? 'SELECT id FROM tickets WHERE id=$1' : 'SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',
+    isAdmin && !pid ? [req.params.id] : [req.params.id, pid]
+  );
   if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
   const { rows } = await pool.query('SELECT * FROM ticket_historico WHERE ticket_id=$1 ORDER BY criado_em DESC',[req.params.id]);
   res.json(rows);
 });
 
-app.post('/api/tickets/:id/historico', auth, comPredio, async (req, res) => {
+app.post('/api/tickets/:id/historico', auth, async (req, res) => {
+  const pid = parseInt(req.headers['x-predio-id']) || null;
+  const isAdmin = ['superadmin','admin'].includes(req.user.role);
   const { mensagem } = req.body;
   if (!mensagem) return res.status(400).json({ erro: 'Mensagem obrigatória' });
-  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',[req.params.id,req.predio_id]);
+  const { rows: tk } = await pool.query(
+    isAdmin && !pid ? 'SELECT id FROM tickets WHERE id=$1' : 'SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',
+    isAdmin && !pid ? [req.params.id] : [req.params.id, pid]
+  );
   if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
   const { rows } = await pool.query(
     'INSERT INTO ticket_historico (ticket_id,mensagem,autor_id,autor_nome) VALUES ($1,$2,$3,$4) RETURNING *',
@@ -576,17 +590,27 @@ app.post('/api/tickets/:id/historico', auth, comPredio, async (req, res) => {
 // ATIVIDADES
 // ══════════════════════════════════════════════════════════════
 
-app.get('/api/tickets/:id/atividades', auth, comPredio, async (req, res) => {
-  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',[req.params.id,req.predio_id]);
+app.get('/api/tickets/:id/atividades', auth, async (req, res) => {
+  const pid = parseInt(req.headers['x-predio-id']) || null;
+  const isAdmin = ['superadmin','admin'].includes(req.user.role);
+  const { rows: tk } = await pool.query(
+    isAdmin && !pid ? 'SELECT id FROM tickets WHERE id=$1' : 'SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',
+    isAdmin && !pid ? [req.params.id] : [req.params.id, pid]
+  );
   if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
   const { rows } = await pool.query('SELECT * FROM ticket_atividades WHERE ticket_id=$1 ORDER BY criado_em ASC',[req.params.id]);
   res.json(rows);
 });
 
-app.post('/api/tickets/:id/atividades', auth, comPredio, async (req, res) => {
+app.post('/api/tickets/:id/atividades', auth, async (req, res) => {
+  const pid = parseInt(req.headers['x-predio-id']) || null;
+  const isAdmin = ['superadmin','admin'].includes(req.user.role);
   const { titulo, responsavel_nome, prazo } = req.body;
   if (!titulo) return res.status(400).json({ erro: 'Título obrigatório' });
-  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',[req.params.id,req.predio_id]);
+  const { rows: tk } = await pool.query(
+    isAdmin && !pid ? 'SELECT id FROM tickets WHERE id=$1' : 'SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',
+    isAdmin && !pid ? [req.params.id] : [req.params.id, pid]
+  );
   if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
   const { rows } = await pool.query(
     'INSERT INTO ticket_atividades (ticket_id,titulo,responsavel_nome,prazo,criado_por) VALUES ($1,$2,$3,$4,$5) RETURNING *',
@@ -608,8 +632,13 @@ app.patch('/api/atividades/:id/toggle', auth, async (req, res) => {
 // FOTOS
 // ══════════════════════════════════════════════════════════════
 
-app.post('/api/tickets/:id/fotos', auth, comPredio, upload.array('fotos',10), async (req, res) => {
-  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',[req.params.id,req.predio_id]);
+app.post('/api/tickets/:id/fotos', auth, upload.array('fotos',10), async (req, res) => {
+  const pid = parseInt(req.headers['x-predio-id']) || null;
+  const isAdmin = ['superadmin','admin'].includes(req.user.role);
+  const { rows: tk } = await pool.query(
+    isAdmin && !pid ? 'SELECT id FROM tickets WHERE id=$1' : 'SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',
+    isAdmin && !pid ? [req.params.id] : [req.params.id, pid]
+  );
   if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
   if (!req.files||!req.files.length) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
   const inseridas = [];
@@ -625,8 +654,13 @@ app.post('/api/tickets/:id/fotos', auth, comPredio, upload.array('fotos',10), as
   res.status(201).json(inseridas);
 });
 
-app.get('/api/tickets/:id/fotos', auth, comPredio, async (req, res) => {
-  const { rows: tk } = await pool.query('SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',[req.params.id,req.predio_id]);
+app.get('/api/tickets/:id/fotos', auth, async (req, res) => {
+  const pid = parseInt(req.headers['x-predio-id']) || null;
+  const isAdmin = ['superadmin','admin'].includes(req.user.role);
+  const { rows: tk } = await pool.query(
+    isAdmin && !pid ? 'SELECT id FROM tickets WHERE id=$1' : 'SELECT id FROM tickets WHERE id=$1 AND predio_id=$2',
+    isAdmin && !pid ? [req.params.id] : [req.params.id, pid]
+  );
   if (!tk[0]) return res.status(404).json({ erro: 'Não encontrado' });
   const { rows } = await pool.query('SELECT * FROM ticket_fotos WHERE ticket_id=$1 ORDER BY criado_em ASC',[req.params.id]);
   res.json(rows);
@@ -765,30 +799,34 @@ const CATEGORIAS_PADRAO = [
   'Climatização / AC','Hidráulica','Elétrica','Solicitação de serviço','Reclamação','Outro'
 ];
 
-app.get('/api/categorias', auth, comPredio, async (req, res) => {
+app.get('/api/categorias', auth, async (req, res) => {
+  const pid = parseInt(req.headers['x-predio-id']) || null;
+  if (!pid) return res.json(CATEGORIAS_PADRAO.map(n => ({ nome: n })));
   const { rows } = await pool.query(
     'SELECT id, nome FROM categorias_predios WHERE predio_id=$1 AND ativo=TRUE ORDER BY nome',
-    [req.predio_id]
+    [pid]
   );
-  // Se não tem categorias customizadas, retorna padrão
   if (!rows.length) return res.json(CATEGORIAS_PADRAO.map(n => ({ nome: n })));
   res.json(rows);
 });
 
-app.post('/api/categorias', auth, comPredio, adminOnly, async (req, res) => {
+app.post('/api/categorias', auth, async (req, res) => {
+  const pid = parseInt(req.headers['x-predio-id']) || null;
+  if (!pid) return res.status(400).json({ erro: 'Prédio obrigatório para criar categoria' });
+  if (!['superadmin','admin'].includes(req.user.role)) return res.status(403).json({ erro: 'Sem permissão' });
   const { nome } = req.body;
   if (!nome?.trim()) return res.status(400).json({ erro: 'Nome obrigatório' });
   try {
     const { rows } = await pool.query(
       'INSERT INTO categorias_predios (predio_id, nome) VALUES ($1,$2) ON CONFLICT (predio_id,nome) DO UPDATE SET ativo=TRUE RETURNING *',
-      [req.predio_id, nome.trim()]
+      [pid, nome.trim()]
     );
     res.status(201).json(rows[0]);
   } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
 });
 
-app.delete('/api/categorias/:id', auth, comPredio, adminOnly, async (req, res) => {
-  await pool.query('UPDATE categorias_predios SET ativo=FALSE WHERE id=$1 AND predio_id=$2', [req.params.id, req.predio_id]);
+app.delete('/api/categorias/:id', auth, adminOnly, async (req, res) => {
+  await pool.query('UPDATE categorias_predios SET ativo=FALSE WHERE id=$1', [req.params.id]);
   res.json({ ok: true });
 });
 
@@ -797,10 +835,12 @@ app.delete('/api/categorias/:id', auth, comPredio, adminOnly, async (req, res) =
 // ══════════════════════════════════════════════════════════════
 
 // GET /api/unidades — lista unidades do prédio ativo
-app.get('/api/unidades', auth, comPredio, async (req, res) => {
+app.get('/api/unidades', auth, async (req, res) => {
+  const pid = parseInt(req.headers['x-predio-id']) || null;
+  if (!pid) return res.json([]); // sem prédio selecionado = sem unidades
   const { rows } = await pool.query(
     'SELECT id, sap, numero, andar, label FROM unidades WHERE predio_id=$1 AND ativo=TRUE ORDER BY sap',
-    [req.predio_id]
+    [pid]
   );
   res.json(rows);
 });
@@ -895,6 +935,22 @@ app.get('/api/stats', auth, async (req, res) => {
     pool.query(`SELECT COUNT(*) FROM tickets WHERE ${wherePrediod2} AND status NOT IN ('resolvido','cancelado')`, params2),
   ]);
   res.json({aberto:parseInt(a.rows[0].count),andamento:parseInt(b.rows[0].count),resolvido:parseInt(c.rows[0].count),hoje:parseInt(d.rows[0].count)});
+});
+
+// GET /api/tickets/:id — busca ticket individual
+app.get('/api/tickets/:id', auth, async (req, res) => {
+  const pid = parseInt(req.headers['x-predio-id']) || null;
+  const isAdmin = ['superadmin','admin'].includes(req.user.role);
+  try {
+    const { rows } = await pool.query(
+      `SELECT t.*, p.nome as predio_nome FROM tickets t
+       JOIN predios p ON p.id=t.predio_id
+       WHERE t.id=$1 ${!isAdmin || pid ? 'AND t.predio_id=$2' : ''}`,
+      !isAdmin || pid ? [req.params.id, pid||0] : [req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ erro: 'Não encontrado' });
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
 });
 
 // DELETE ticket — superadmin only
