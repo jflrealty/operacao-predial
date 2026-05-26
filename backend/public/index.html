@@ -1019,6 +1019,7 @@ async function entrarNoApp() {
 
   await Promise.all([loadStats(), loadTickets(), loadMembros(), isAdmin && loadAllPredios()]);
   carregarUnidadesForm();
+  inicializarChipsPredio(); // cria chips uma única vez
   renderDashboard();
   renderList();
 }
