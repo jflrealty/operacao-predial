@@ -1,5 +1,5 @@
 // ============================================================
-// OPERAÇÃO JFL Inc — Backend v2.4
+// OPERACAO JFL Inc — Backend v2.5
 // Express + PostgreSQL + JWT | Nodemailer | PDFKit | ExcelJS | Multer
 // ============================================================
 
@@ -1470,8 +1470,21 @@ app.get('/api/relatorios/kpi/pdf', auth, async (req, res) => {
   } catch(e) { console.error(e); res.status(500).json({erro:'Erro ao gerar KPI PDF'}); }
 });
 
+// ── INDEX.HTML — sempre sem cache ────────────────────────────
+app.get('/', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'public/index.html'));
+});
+
 // ── SPA FALLBACK ──────────────────────────────────────────────
-app.get('*',(_, res)=>res.sendFile(path.join(__dirname,'public/index.html')));
+app.get('*', (req, res) => {
+  if (req.path.includes('.')) return res.status(404).send('Not found');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public/index.html'));
+});
 
 // ══════════════════════════════════════════════════════════════
 // JOB: NOTIFICAÇÃO DE PRAZO
