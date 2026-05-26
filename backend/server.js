@@ -985,6 +985,334 @@ app.patch('/api/tickets/:id', auth, adminOnly, async (req, res) => {
   } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
 });
 
+// ══════════════════════════════════════════════════════════════
+// RELATÓRIO DE KPIs
+// ══════════════════════════════════════════════════════════════
+
+async function calcularKPIs(predioId, responsavelId, de, ate) {
+  const isAllPredios = !predioId;
+  const params = [];
+  let whereBase = '1=1';
+  if (predioId)      { params.push(predioId);      whereBase += ` AND t.predio_id=$${params.length}`; }
+  if (responsavelId) { params.push(responsavelId); whereBase += ` AND t.responsavel_id=$${params.length}`; }
+  if (de)            { params.push(de);            whereBase += ` AND t.criado_em::date>=$${params.length}`; }
+  if (ate)           { params.push(ate);           whereBase += ` AND t.criado_em::date<=$${params.length}`; }
+
+  // Busca todos os tickets do período
+  const { rows: tickets } = await pool.query(
+    `SELECT t.*, p.nome as predio_nome,
+       u.nome as resp_nome,
+       EXTRACT(EPOCH FROM (t.atualizado_em - t.criado_em))/86400 as dias_resolucao
+     FROM tickets t
+     JOIN predios p ON p.id = t.predio_id
+     LEFT JOIN usuarios u ON u.id = t.responsavel_id
+     WHERE ${whereBase}
+     ORDER BY t.criado_em DESC`, params
+  );
+
+  const hoje = new Date().toISOString().split('T')[0];
+  const total = tickets.length;
+  const resolvidos = tickets.filter(t => t.status === 'resolvido');
+  const abertos    = tickets.filter(t => t.status === 'aberto');
+  const andamento  = tickets.filter(t => t.status === 'em andamento');
+  const cancelados = tickets.filter(t => t.status === 'cancelado');
+  const atrasados  = tickets.filter(t =>
+    t.prazo && t.prazo.toISOString().split('T')[0] < hoje &&
+    !['resolvido','cancelado'].includes(t.status)
+  );
+  const comPrazo = tickets.filter(t => t.prazo);
+  const dentroSLA = comPrazo.filter(t => {
+    if (t.status !== 'resolvido') return false;
+    return t.prazo && t.atualizado_em && new Date(t.atualizado_em) <= new Date(t.prazo);
+  });
+
+  // Tempo médio de resolução
+  const resolvidosComTempo = resolvidos.filter(t => t.dias_resolucao != null && t.dias_resolucao >= 0);
+  const tempoMedioResolucao = resolvidosComTempo.length > 0
+    ? (resolvidosComTempo.reduce((s,t) => s + parseFloat(t.dias_resolucao), 0) / resolvidosComTempo.length).toFixed(1)
+    : null;
+
+  // KPIs por responsável
+  const porResp = {};
+  tickets.forEach(t => {
+    const key = t.responsavel_id || 0;
+    const nome = t.resp_nome || 'Não atribuído';
+    if (!porResp[key]) porResp[key] = { nome, total:0, resolvidos:0, atrasados:0, tempos:[], urgentes:0 };
+    porResp[key].total++;
+    if (t.status === 'resolvido') {
+      porResp[key].resolvidos++;
+      if (t.dias_resolucao != null && t.dias_resolucao >= 0) porResp[key].tempos.push(parseFloat(t.dias_resolucao));
+    }
+    if (t.prazo && t.prazo.toISOString().split('T')[0] < hoje && !['resolvido','cancelado'].includes(t.status))
+      porResp[key].atrasados++;
+    if (t.prioridade === 'Urgente') porResp[key].urgentes++;
+  });
+  const rankingResp = Object.values(porResp).map(r => ({
+    ...r,
+    taxa: r.total > 0 ? Math.round(r.resolvidos/r.total*100) : 0,
+    tempoMedio: r.tempos.length > 0 ? (r.tempos.reduce((s,v)=>s+v,0)/r.tempos.length).toFixed(1) : null,
+  })).sort((a,b) => b.total - a.total);
+
+  // KPIs por categoria
+  const porCat = {};
+  tickets.forEach(t => {
+    const cat = t.categoria || 'Sem categoria';
+    if (!porCat[cat]) porCat[cat] = { total:0, resolvidos:0 };
+    porCat[cat].total++;
+    if (t.status === 'resolvido') porCat[cat].resolvidos++;
+  });
+  const rankingCat = Object.entries(porCat)
+    .map(([cat, d]) => ({ cat, ...d, taxa: Math.round(d.resolvidos/d.total*100) }))
+    .sort((a,b) => b.total - a.total);
+
+  // KPIs por prédio (se visão consolidada)
+  const porPredio = {};
+  if (isAllPredios) {
+    tickets.forEach(t => {
+      const key = t.predio_id;
+      if (!porPredio[key]) porPredio[key] = { nome: t.predio_nome, total:0, resolvidos:0, atrasados:0 };
+      porPredio[key].total++;
+      if (t.status === 'resolvido') porPredio[key].resolvidos++;
+      if (t.prazo && t.prazo.toISOString().split('T')[0] < hoje && !['resolvido','cancelado'].includes(t.status))
+        porPredio[key].atrasados++;
+    });
+  }
+  const rankingPredio = Object.values(porPredio)
+    .map(p => ({ ...p, taxa: p.total > 0 ? Math.round(p.resolvidos/p.total*100) : 0 }))
+    .sort((a,b) => b.total - a.total);
+
+  return {
+    resumo: { total, resolvidos: resolvidos.length, abertos: abertos.length, andamento: andamento.length,
+              cancelados: cancelados.length, atrasados: atrasados.length,
+              taxaResolucao: total > 0 ? Math.round(resolvidos.length/total*100) : 0,
+              tempoMedioResolucao, taxaSLA: comPrazo.length > 0 ? Math.round(dentroSLA.length/comPrazo.length*100) : null,
+              urgentes: tickets.filter(t=>t.prioridade==='Urgente').length },
+    rankingResp, rankingCat, rankingPredio, tickets
+  };
+}
+
+// GET /api/relatorios/kpi/excel
+app.get('/api/relatorios/kpi/excel', auth, async (req, res) => {
+  try {
+    const isAdmin = ['superadmin','admin'].includes(req.user.role);
+    const predioId = req.query.predio_id ? parseInt(req.query.predio_id) : (parseInt(req.headers['x-predio-id'])||null);
+    const responsavelId = req.query.responsavel_id ? parseInt(req.query.responsavel_id) : (!isAdmin ? req.user.id : null);
+    const { de, ate } = req.query;
+    const kpi = await calcularKPIs(predioId, responsavelId, de, ate);
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Operação JFL Inc';
+
+    // Aba Resumo
+    const wsR = wb.addWorksheet('📊 Resumo');
+    wsR.getColumn(1).width = 32; wsR.getColumn(2).width = 18;
+    wsR.addRow(['RELATÓRIO DE KPIs — OPERAÇÃO JFL INC']).font = {bold:true,size:14};
+    wsR.addRow(['Gerado em', new Date().toLocaleString('pt-BR')]);
+    if (de||ate) wsR.addRow(['Período', `${de||'início'} → ${ate||'hoje'}`]);
+    wsR.addRow([]);
+    wsR.addRow(['INDICADOR','VALOR']).eachCell(c=>{c.font={bold:true};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1A1917'}};c.font={bold:true,color:{argb:'FFFFFFFF'}};});
+    const rows = [
+      ['Total de tickets', kpi.resumo.total],
+      ['Em aberto', kpi.resumo.abertos],
+      ['Em andamento', kpi.resumo.andamento],
+      ['Resolvidos', kpi.resumo.resolvidos],
+      ['Cancelados', kpi.resumo.cancelados],
+      ['Atrasados (prazo vencido)', kpi.resumo.atrasados],
+      ['Urgentes', kpi.resumo.urgentes],
+      ['Taxa de resolução', kpi.resumo.taxaResolucao+'%'],
+      ['Tempo médio de resolução', kpi.resumo.tempoMedioResolucao ? kpi.resumo.tempoMedioResolucao+' dias' : '—'],
+      ['Taxa de cumprimento de SLA', kpi.resumo.taxaSLA != null ? kpi.resumo.taxaSLA+'%' : '—'],
+    ];
+    rows.forEach(r => {
+      const row = wsR.addRow(r);
+      if (typeof r[1]==='number' && r[1]>0 && r[0].includes('traso')) row.getCell(2).font={color:{argb:'FFC0392B'},bold:true};
+    });
+
+    // Aba Responsáveis
+    const wsResp = wb.addWorksheet('👥 Por Responsável');
+    wsResp.columns = [
+      {header:'Responsável',key:'nome',width:28},{header:'Total',key:'total',width:10},
+      {header:'Resolvidos',key:'resolvidos',width:12},{header:'Taxa (%)',key:'taxa',width:10},
+      {header:'Atrasados',key:'atrasados',width:12},{header:'Urgentes',key:'urgentes',width:10},
+      {header:'Tempo Médio (dias)',key:'tempoMedio',width:20},
+    ];
+    wsResp.getRow(1).eachCell(c=>{c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1A1917'}};c.font={bold:true,color:{argb:'FFFFFFFF'}};});
+    kpi.rankingResp.forEach(r => {
+      const row = wsResp.addRow({...r, tempoMedio: r.tempoMedio||'—'});
+      if (r.atrasados > 0) row.getCell('atrasados').font={color:{argb:'FFC0392B'},bold:true};
+      if (r.taxa >= 80) row.getCell('taxa').font={color:{argb:'FF1E6B3C'},bold:true};
+    });
+
+    // Aba Categorias
+    const wsCat = wb.addWorksheet('🏷️ Por Categoria');
+    wsCat.columns = [
+      {header:'Categoria',key:'cat',width:30},{header:'Total',key:'total',width:10},
+      {header:'Resolvidos',key:'resolvidos',width:12},{header:'Taxa (%)',key:'taxa',width:10},
+    ];
+    wsCat.getRow(1).eachCell(c=>{c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1A1917'}};c.font={bold:true,color:{argb:'FFFFFFFF'}};});
+    kpi.rankingCat.forEach(r => wsCat.addRow(r));
+
+    // Aba Prédios (se consolidado)
+    if (kpi.rankingPredio.length > 0) {
+      const wsPred = wb.addWorksheet('🏢 Por Prédio');
+      wsPred.columns = [
+        {header:'Prédio',key:'nome',width:24},{header:'Total',key:'total',width:10},
+        {header:'Resolvidos',key:'resolvidos',width:12},{header:'Taxa (%)',key:'taxa',width:10},
+        {header:'Atrasados',key:'atrasados',width:12},
+      ];
+      wsPred.getRow(1).eachCell(c=>{c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1A1917'}};c.font={bold:true,color:{argb:'FFFFFFFF'}};});
+      kpi.rankingPredio.forEach(r => wsPred.addRow(r));
+    }
+
+    res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition',`attachment; filename="kpi-${Date.now()}.xlsx"`);
+    await wb.xlsx.write(res); res.end();
+  } catch(e) { console.error(e); res.status(500).json({erro:'Erro ao gerar KPI Excel'}); }
+});
+
+// GET /api/relatorios/kpi/pdf
+app.get('/api/relatorios/kpi/pdf', auth, async (req, res) => {
+  try {
+    const isAdmin = ['superadmin','admin'].includes(req.user.role);
+    const predioId = req.query.predio_id ? parseInt(req.query.predio_id) : (parseInt(req.headers['x-predio-id'])||null);
+    const responsavelId = req.query.responsavel_id ? parseInt(req.query.responsavel_id) : (!isAdmin ? req.user.id : null);
+    const { de, ate } = req.query;
+    const kpi = await calcularKPIs(predioId, responsavelId, de, ate);
+    const { rows: predioRows } = predioId
+      ? await pool.query('SELECT nome FROM predios WHERE id=$1',[predioId])
+      : { rows: [{nome:'Todos os prédios'}] };
+    const predioNome = predioRows[0]?.nome || 'Todos os prédios';
+
+    const doc = new PDFDocument({margin:40,size:'A4'});
+    res.setHeader('Content-Type','application/pdf');
+    res.setHeader('Content-Disposition',`attachment; filename="kpi-${Date.now()}.pdf"`);
+    doc.pipe(res);
+
+    // Header
+    doc.rect(0,0,doc.page.width,70).fill('#1A1917');
+    doc.fillColor('#fff').fontSize(18).font('Helvetica-Bold').text('📊 Relatório de KPIs',40,18);
+    doc.fontSize(11).font('Helvetica').text(`${predioNome}  ·  ${de||'início'} → ${ate||'hoje'}`,40,44);
+
+    doc.fillColor('#1A1917').moveDown(1.5);
+    doc.fontSize(10).fillColor('#6B6860').text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`,{align:'right'});
+
+    // Resumo geral em cards
+    doc.moveDown(0.5);
+    const r = kpi.resumo;
+    const cardW = (doc.page.width-80)/4;
+    const cardY = doc.y;
+    const cardData = [
+      {label:'Total',val:r.total,color:'#1A4F8A'},
+      {label:'Resolvidos',val:r.resolvidos,color:'#1E6B3C'},
+      {label:'Em aberto',val:r.abertos,color:'#92590A'},
+      {label:'Atrasados',val:r.atrasados,color:r.atrasados>0?'#C0392B':'#1E6B3C'},
+    ];
+    cardData.forEach((c,i) => {
+      const x = 40+i*cardW;
+      doc.rect(x, cardY, cardW-8, 60).fill('#F9F9F7').stroke('#E2DED6');
+      doc.fillColor(c.color).fontSize(24).font('Helvetica-Bold').text(String(c.val), x+8, cardY+8, {width:cardW-16,align:'center'});
+      doc.fillColor('#6B6860').fontSize(9).font('Helvetica').text(c.label, x+8, cardY+38, {width:cardW-16,align:'center'});
+    });
+
+    doc.y = cardY + 72;
+    // Métricas secundárias
+    const metaLine = [
+      `Taxa de resolução: ${r.taxaResolucao}%`,
+      `Tempo médio: ${r.tempoMedioResolucao||'—'} dias`,
+      `SLA: ${r.taxaSLA!=null?r.taxaSLA+'%':'—'}`,
+      `Urgentes: ${r.urgentes}`,
+    ].join('   ·   ');
+    doc.fontSize(10).fillColor('#1A1917').text(metaLine, 40, doc.y, {width:doc.page.width-80});
+    doc.moveDown(1);
+
+    // Tabela por responsável
+    doc.fontSize(12).font('Helvetica-Bold').fillColor('#1A1917').text('👥 Desempenho por Responsável');
+    doc.moveDown(0.3);
+    const colsR = [140,50,60,55,60,55,80];
+    const hdrsR = ['Responsável','Total','Resolvidos','Taxa %','Atrasados','Urgentes','T.Médio(dias)'];
+    let tx = 40;
+    doc.rect(40, doc.y, doc.page.width-80, 18).fill('#1A1917');
+    hdrsR.forEach((h,i) => {
+      doc.fillColor('#fff').fontSize(8).font('Helvetica-Bold').text(h, tx+2, doc.y-14, {width:colsR[i]-4,align:'center'});
+      tx += colsR[i];
+    });
+    doc.y += 4;
+    kpi.rankingResp.slice(0,15).forEach((r,idx) => {
+      if (doc.y > doc.page.height-100) doc.addPage();
+      const ry = doc.y;
+      doc.rect(40, ry, doc.page.width-80, 16).fill(idx%2===0?'#F9F9F7':'#FFFFFF').stroke('#E2DED6');
+      const vals = [r.nome||'Não atribuído',r.total,r.resolvidos,r.taxa+'%',r.atrasados,r.urgentes,r.tempoMedio||'—'];
+      let vx=40;
+      vals.forEach((v,i) => {
+        const isRed = (i===4&&r.atrasados>0)||(i===3&&r.taxa<50);
+        doc.fillColor(isRed?'#C0392B':'#1A1917').fontSize(8).font(i===0?'Helvetica-Bold':'Helvetica')
+          .text(String(v), vx+2, ry+4, {width:colsR[i]-4,align:i===0?'left':'center'});
+        vx += colsR[i];
+      });
+      doc.y = ry+18;
+    });
+
+    doc.moveDown(1);
+    // Tabela por categoria
+    if (doc.y > doc.page.height-150) doc.addPage();
+    doc.fontSize(12).font('Helvetica-Bold').fillColor('#1A1917').text('🏷️ Tickets por Categoria');
+    doc.moveDown(0.3);
+    const colsC = [220,70,80,70];
+    const hdrsC = ['Categoria','Total','Resolvidos','Taxa %'];
+    tx = 40;
+    doc.rect(40, doc.y, doc.page.width-80, 18).fill('#1A1917');
+    hdrsC.forEach((h,i) => {
+      doc.fillColor('#fff').fontSize(8).font('Helvetica-Bold').text(h, tx+2, doc.y-14, {width:colsC[i]-4,align:i===0?'left':'center'});
+      tx += colsC[i];
+    });
+    doc.y += 4;
+    kpi.rankingCat.forEach((c,idx) => {
+      if (doc.y > doc.page.height-60) doc.addPage();
+      const cy = doc.y;
+      doc.rect(40,cy,doc.page.width-80,16).fill(idx%2===0?'#F9F9F7':'#FFFFFF').stroke('#E2DED6');
+      const vals=[c.cat,c.total,c.resolvidos,c.taxa+'%'];
+      let vx=40;
+      vals.forEach((v,i)=>{
+        doc.fillColor('#1A1917').fontSize(8).font(i===0?'Helvetica-Bold':'Helvetica')
+          .text(String(v),vx+2,cy+4,{width:colsC[i]-4,align:i===0?'left':'center'});
+        vx+=colsC[i];
+      });
+      doc.y=cy+18;
+    });
+
+    // Tabela por prédio se consolidado
+    if (kpi.rankingPredio.length > 0) {
+      doc.moveDown(1);
+      if (doc.y > doc.page.height-150) doc.addPage();
+      doc.fontSize(12).font('Helvetica-Bold').fillColor('#1A1917').text('🏢 Tickets por Prédio');
+      doc.moveDown(0.3);
+      const colsP=[180,70,80,70,70];
+      const hdrsP=['Prédio','Total','Resolvidos','Taxa %','Atrasados'];
+      tx=40;
+      doc.rect(40,doc.y,doc.page.width-80,18).fill('#1A1917');
+      hdrsP.forEach((h,i)=>{
+        doc.fillColor('#fff').fontSize(8).font('Helvetica-Bold').text(h,tx+2,doc.y-14,{width:colsP[i]-4,align:i===0?'left':'center'});
+        tx+=colsP[i];
+      });
+      doc.y+=4;
+      kpi.rankingPredio.forEach((p,idx)=>{
+        const py=doc.y;
+        doc.rect(40,py,doc.page.width-80,16).fill(idx%2===0?'#F9F9F7':'#FFFFFF').stroke('#E2DED6');
+        const vals=[p.nome,p.total,p.resolvidos,p.taxa+'%',p.atrasados];
+        let vx=40;
+        vals.forEach((v,i)=>{
+          doc.fillColor('#1A1917').fontSize(8).font(i===0?'Helvetica-Bold':'Helvetica')
+            .text(String(v),vx+2,py+4,{width:colsP[i]-4,align:i===0?'left':'center'});
+          vx+=colsP[i];
+        });
+        doc.y=py+18;
+      });
+    }
+
+    doc.end();
+  } catch(e) { console.error(e); res.status(500).json({erro:'Erro ao gerar KPI PDF'}); }
+});
+
 // ── SPA FALLBACK ──────────────────────────────────────────────
 app.get('*',(_, res)=>res.sendFile(path.join(__dirname,'public/index.html')));
 
