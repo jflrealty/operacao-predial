@@ -707,7 +707,7 @@ app.get('/api/relatorios/excel', auth, async (req, res) => {
     const tickets = await buscarTicketsRelatorio(predioId, filtros);
     const { rows: predioRows } = await pool.query('SELECT nome FROM predios WHERE id=$1',[req.predio_id]);
     const wb = new ExcelJS.Workbook();
-    wb.creator = 'Operação JFL Inc';
+    wb.creator = 'Operacao JFL Inc';
     const ws = wb.addWorksheet('Tickets');
     ws.columns = [
       {header:'ID',key:'id',width:8},{header:'Título',key:'titulo',width:40},
@@ -733,7 +733,7 @@ app.get('/api/relatorios/excel', auth, async (req, res) => {
     });
     ws.autoFilter={from:'A1',to:'L1'};
     const wsSumario=wb.addWorksheet('Resumo');
-    wsSumario.addRow(['Relatório — '+(predioRows[0]?.nome||'')]);
+    wsSumario.addRow(['Relatorio — '+(predioRows[0]?.nome||'')]);
     wsSumario.addRow(['Gerado em',new Date().toLocaleString('pt-BR')]);
     wsSumario.addRow([]);
     wsSumario.addRow(['Indicador','Qtd']);
@@ -764,8 +764,8 @@ app.get('/api/relatorios/pdf', auth, async (req, res) => {
     res.setHeader('Content-Disposition',`attachment; filename="tickets-${Date.now()}.pdf"`);
     doc.pipe(res);
     doc.rect(0,0,doc.page.width,70).fill('#1A1917');
-    doc.fillColor('#ffffff').fontSize(18).font('Helvetica-Bold').text('Operação JFL Inc',40,20);
-    doc.fontSize(11).font('Helvetica').text(`Relatório — ${predioNome}`,40,44);
+    doc.fillColor('#ffffff').fontSize(18).font('Helvetica-Bold').text('Operacao JFL Inc',40,20);
+    doc.fontSize(11).font('Helvetica').text(`Relatorio - ${predioNome||'Todos os predios'}`,40,44);
     doc.fillColor('#1A1917').moveDown(2);
     doc.fontSize(10).fillColor('#6B6860').text(`Gerado em: ${new Date().toLocaleString('pt-BR')}   |   Total: ${tickets.length}`,{align:'right'});
     doc.moveDown(0.5);
@@ -778,8 +778,8 @@ app.get('/api/relatorios/pdf', auth, async (req, res) => {
       doc.fillColor('#A09D98').fontSize(9).font('Helvetica').text(`#${t.id}`,52,cardY+10);
       doc.fillColor('#1A1917').fontSize(11).font('Helvetica-Bold').text(t.titulo,52,cardY+22,{width:doc.page.width-160});
       const tagX=doc.page.width-160;
-      doc.fontSize(9).fillColor(prioColors[t.prioridade]||'#1A1917').text(`● ${t.prioridade}`,tagX,cardY+10,{width:110,align:'right'});
-      doc.fillColor('#6B6860').text(t.status,tagX,cardY+22,{width:110,align:'right'});
+      doc.fontSize(9).fillColor(prioColors[t.prioridade]||'#1A1917').font('Helvetica-Bold').text(t.prioridade||'Media',tagX,cardY+10,{width:110,align:'right'});
+      doc.font('Helvetica').fillColor('#6B6860').text(t.status||'',tagX,cardY+22,{width:110,align:'right'});
       const meta=[t.categoria,t.local,t.responsavel_nome||'A definir',t.prazo?new Date(t.prazo).toLocaleDateString('pt-BR'):''].filter(Boolean).join('  ·  ');
       doc.font('Helvetica').fontSize(9).fillColor('#6B6860').text(meta,52,cardY+42,{width:doc.page.width-110});
       if(t.descricao) doc.fontSize(9).fillColor('#1A1917').text(t.descricao,52,cardY+58,{width:doc.page.width-110,ellipsis:true,height:28});
@@ -1101,14 +1101,14 @@ app.get('/api/relatorios/kpi/excel', auth, async (req, res) => {
     const kpi = await calcularKPIs(predioId, responsavelId, de, ate);
 
     const wb = new ExcelJS.Workbook();
-    wb.creator = 'Operação JFL Inc';
+    wb.creator = 'Operacao JFL Inc';
 
     // Aba Resumo
-    const wsR = wb.addWorksheet('📊 Resumo');
+    const wsR = wb.addWorksheet('Resumo');
     wsR.getColumn(1).width = 32; wsR.getColumn(2).width = 18;
     wsR.addRow(['RELATÓRIO DE KPIs — OPERAÇÃO JFL INC']).font = {bold:true,size:14};
     wsR.addRow(['Gerado em', new Date().toLocaleString('pt-BR')]);
-    if (de||ate) wsR.addRow(['Período', `${de||'início'} → ${ate||'hoje'}`]);
+    if (de||ate) wsR.addRow(['Período', `${de||'inicio'} → ${ate||'hoje'}`]);
     wsR.addRow([]);
     wsR.addRow(['INDICADOR','VALOR']).eachCell(c=>{c.font={bold:true};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1A1917'}};c.font={bold:true,color:{argb:'FFFFFFFF'}};});
     const rows = [
@@ -1129,7 +1129,7 @@ app.get('/api/relatorios/kpi/excel', auth, async (req, res) => {
     });
 
     // Aba Responsáveis
-    const wsResp = wb.addWorksheet('👥 Por Responsável');
+    const wsResp = wb.addWorksheet('Por Responsavel');
     wsResp.columns = [
       {header:'Responsável',key:'nome',width:28},{header:'Total',key:'total',width:10},
       {header:'Resolvidos',key:'resolvidos',width:12},{header:'Taxa (%)',key:'taxa',width:10},
@@ -1144,7 +1144,7 @@ app.get('/api/relatorios/kpi/excel', auth, async (req, res) => {
     });
 
     // Aba Categorias
-    const wsCat = wb.addWorksheet('🏷️ Por Categoria');
+    const wsCat = wb.addWorksheet('Por Categoria');
     wsCat.columns = [
       {header:'Categoria',key:'cat',width:30},{header:'Total',key:'total',width:10},
       {header:'Resolvidos',key:'resolvidos',width:12},{header:'Taxa (%)',key:'taxa',width:10},
@@ -1154,7 +1154,7 @@ app.get('/api/relatorios/kpi/excel', auth, async (req, res) => {
 
     // Aba Prédios (se consolidado)
     if (kpi.rankingPredio.length > 0) {
-      const wsPred = wb.addWorksheet('🏢 Por Prédio');
+      const wsPred = wb.addWorksheet('Por Predio');
       wsPred.columns = [
         {header:'Prédio',key:'nome',width:24},{header:'Total',key:'total',width:10},
         {header:'Resolvidos',key:'resolvidos',width:12},{header:'Taxa (%)',key:'taxa',width:10},
@@ -1181,7 +1181,7 @@ app.get('/api/relatorios/kpi/pdf', auth, async (req, res) => {
     const { rows: predioRows } = predioId
       ? await pool.query('SELECT nome FROM predios WHERE id=$1',[predioId])
       : { rows: [{nome:'Todos os prédios'}] };
-    const predioNome = predioRows[0]?.nome || 'Todos os prédios';
+    const predioNome = predioRows[0]?.nome || 'Todos os predios';
 
     const doc = new PDFDocument({margin:40,size:'A4'});
     res.setHeader('Content-Type','application/pdf');
@@ -1190,8 +1190,8 @@ app.get('/api/relatorios/kpi/pdf', auth, async (req, res) => {
 
     // Header
     doc.rect(0,0,doc.page.width,70).fill('#1A1917');
-    doc.fillColor('#fff').fontSize(18).font('Helvetica-Bold').text('📊 Relatório de KPIs',40,18);
-    doc.fontSize(11).font('Helvetica').text(`${predioNome}  ·  ${de||'início'} → ${ate||'hoje'}`,40,44);
+    doc.fillColor('#fff').fontSize(18).font('Helvetica-Bold').text('Relatorio de KPIs',40,18);
+    doc.fontSize(11).font('Helvetica').text(`${predioNome}  ·  ${de||'inicio'} → ${ate||'hoje'}`,40,44);
 
     doc.fillColor('#1A1917').moveDown(1.5);
     doc.fontSize(10).fillColor('#6B6860').text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`,{align:'right'});
@@ -1226,7 +1226,7 @@ app.get('/api/relatorios/kpi/pdf', auth, async (req, res) => {
     doc.moveDown(1);
 
     // Tabela por responsável
-    doc.fontSize(12).font('Helvetica-Bold').fillColor('#1A1917').text('👥 Desempenho por Responsável');
+    doc.fontSize(12).font('Helvetica-Bold').fillColor('#1A1917').text('Desempenho por Responsavel');
     doc.moveDown(0.3);
     const colsR = [140,50,60,55,60,55,80];
     const hdrsR = ['Responsável','Total','Resolvidos','Taxa %','Atrasados','Urgentes','T.Médio(dias)'];
@@ -1255,7 +1255,7 @@ app.get('/api/relatorios/kpi/pdf', auth, async (req, res) => {
     doc.moveDown(1);
     // Tabela por categoria
     if (doc.y > doc.page.height-150) doc.addPage();
-    doc.fontSize(12).font('Helvetica-Bold').fillColor('#1A1917').text('🏷️ Tickets por Categoria');
+    doc.fontSize(12).font('Helvetica-Bold').fillColor('#1A1917').text('Tickets por Categoria');
     doc.moveDown(0.3);
     const colsC = [220,70,80,70];
     const hdrsC = ['Categoria','Total','Resolvidos','Taxa %'];
@@ -1284,7 +1284,7 @@ app.get('/api/relatorios/kpi/pdf', auth, async (req, res) => {
     if (kpi.rankingPredio.length > 0) {
       doc.moveDown(1);
       if (doc.y > doc.page.height-150) doc.addPage();
-      doc.fontSize(12).font('Helvetica-Bold').fillColor('#1A1917').text('🏢 Tickets por Prédio');
+      doc.fontSize(12).font('Helvetica-Bold').fillColor('#1A1917').text('Tickets por Predio');
       doc.moveDown(0.3);
       const colsP=[180,70,80,70,70];
       const hdrsP=['Prédio','Total','Resolvidos','Taxa %','Atrasados'];
