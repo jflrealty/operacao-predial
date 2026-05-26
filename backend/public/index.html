@@ -86,7 +86,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .topbar-right{display:flex;align-items:center;gap:8px;}
 .topbar-user{font-size:12px;color:var(--text2);}
 .desktop-only{display:none;}
-@media(min-width:768px){.desktop-only{display:inline;}}
+.mobile-only{display:flex;align-items:center;}
+@media(min-width:768px){
+  .desktop-only{display:inline;}
+  .mobile-only{display:none;}
+}
 
 @media(min-width:768px){
   .layout{display:flex;min-height:calc(100vh - 56px);}
@@ -298,6 +302,21 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     <div class="topbar-right">
       <span class="topbar-user desktop-only" id="app-user-label"></span>
       <button class="btn btn-ghost btn-sm" onclick="showNewTicket()">+ Ticket</button>
+      <div class="mobile-only" style="position:relative;">
+        <button onclick="toggleMobileMenu()" style="background:none;border:none;padding:8px;cursor:pointer;display:flex;flex-direction:column;gap:4px;">
+          <span style="display:block;width:18px;height:2px;background:var(--text2);border-radius:2px;"></span>
+          <span style="display:block;width:18px;height:2px;background:var(--text2);border-radius:2px;"></span>
+          <span style="display:block;width:18px;height:2px;background:var(--text2);border-radius:2px;"></span>
+        </button>
+        <div id="mobile-menu" style="display:none;position:absolute;right:0;top:44px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:8px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:200;">
+          <div style="padding:8px 12px;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);margin-bottom:6px;" id="mobile-menu-user"></div>
+          <button onclick="showScreen('perfil',null);closeMobileMenu()" style="width:100%;text-align:left;padding:10px 12px;border:none;background:none;font-family:var(--font);font-size:14px;cursor:pointer;border-radius:var(--radius);color:var(--text);">👤 Meu perfil</button>
+          <button onclick="showScreen('config',null);closeMobileMenu()" class="admin-only" style="display:none;width:100%;text-align:left;padding:10px 12px;border:none;background:none;font-family:var(--font);font-size:14px;cursor:pointer;border-radius:var(--radius);color:var(--text);">⚙️ Configuracoes</button>
+          <button onclick="showPredioSelector();closeMobileMenu()" style="width:100%;text-align:left;padding:10px 12px;border:none;background:none;font-family:var(--font);font-size:14px;cursor:pointer;border-radius:var(--radius);color:var(--text);">🏢 Trocar predio</button>
+          <div style="height:1px;background:var(--border);margin:6px 0;"></div>
+          <button onclick="fazerLogout()" style="width:100%;text-align:left;padding:10px 12px;border:none;background:none;font-family:var(--font);font-size:14px;cursor:pointer;border-radius:var(--radius);color:var(--red);">↩ Sair</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -940,6 +959,33 @@ async function entrarNoApp() {
 function showPredioSelector() {
   renderPredioGrid(currentUser.predios, 'switch-predio-grid');
   document.getElementById('overlay-predio').classList.add('open');
+}
+
+function toggleMobileMenu() {
+  const m = document.getElementById('mobile-menu');
+  if (!m) return;
+  const isOpen = m.style.display !== 'none';
+  m.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) {
+    // Atualiza nome do usuário
+    const userEl = document.getElementById('mobile-menu-user');
+    if (userEl && currentUser) userEl.textContent = currentUser.nome + (currentUser.cargo ? ' · ' + currentUser.cargo : '');
+    // Fecha ao clicar fora
+    setTimeout(() => document.addEventListener('click', closeMobileMenuOutside), 0);
+  }
+}
+
+function closeMobileMenuOutside(e) {
+  const menu = document.getElementById('mobile-menu');
+  if (menu && !menu.contains(e.target) && !e.target.closest('[onclick="toggleMobileMenu()"]')) {
+    closeMobileMenu();
+  }
+}
+
+function closeMobileMenu() {
+  const m = document.getElementById('mobile-menu');
+  if (m) m.style.display = 'none';
+  document.removeEventListener('click', closeMobileMenuOutside);
 }
 
 function fazerLogout() {
