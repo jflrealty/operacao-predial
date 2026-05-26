@@ -1182,7 +1182,10 @@ async function criarTicket() {
 // DETALHE
 // ════════════════════════════════════════════════
 async function openDetail(id) {
-  const t = allTickets.find(x=>x.id===id);
+  let t = allTickets.find(x=>x.id===id);
+  if (!t) {
+    try { t = await GET(`/api/tickets/${id}`); } catch(e) { return; }
+  }
   if (!t) return;
   document.getElementById('overlay-detail').classList.add('open');
   document.getElementById('detail-body').innerHTML='<div class="loader">Carregando...</div>';
@@ -1208,7 +1211,7 @@ async function openDetail(id) {
   // Substitui placeholder TICKETID pelo ID real na seção de fotos do template
   // (feito via JS após render)
   const detailHtml = `
-    <div class="detail-id">#${t.id}${predioAtivo?.nome ? " · "+predioAtivo.nome : ""}</div>
+    <div class="detail-id">#${t.id}${t.predio_nome ? " · "+t.predio_nome : (predioAtivo?.nome ? " · "+predioAtivo.nome : "")}</div>
     <div class="detail-title">${t.titulo}</div>
     <div style="display:flex;gap:8px;margin:10px 0 16px;flex-wrap:wrap;">${statusBadge(t.status)} ${prioBadge(t.prioridade||'Baixa')}</div>
     <div class="detail-grid">
