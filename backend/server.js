@@ -645,21 +645,32 @@ app.delete('/api/fotos/:id', auth, async (req, res) => {
 // RELATÓRIOS
 // ══════════════════════════════════════════════════════════════
 
-async function buscarTicketsRelatorio(predio_id, { status, prioridade, de, ate }={}) {
-  let q='SELECT * FROM tickets WHERE predio_id=$1';
-  const params=[predio_id];
-  if (status)     { params.push(status);     q+=` AND status=$${params.length}`; }
-  if (prioridade) { params.push(prioridade); q+=` AND prioridade=$${params.length}`; }
-  if (de)         { params.push(de);         q+=` AND criado_em::date>=$${params.length}`; }
-  if (ate)        { params.push(ate);        q+=` AND criado_em::date<=$${params.length}`; }
-  q+=' ORDER BY criado_em DESC';
-  const { rows } = await pool.query(q,params);
+async function buscarTicketsRelatorio(predio_id, { status, prioridade, de, ate, responsavel_id }={}) {
+  let q = predio_id
+    ? 'SELECT t.*, p.nome as predio_nome FROM tickets t JOIN predios p ON p.id=t.predio_id WHERE t.predio_id=$1'
+    : 'SELECT t.*, p.nome as predio_nome FROM tickets t JOIN predios p ON p.id=t.predio_id WHERE 1=1';
+  const params = predio_id ? [predio_id] : [];
+  if (status)        { params.push(status);              q+=` AND t.status=$${params.length}`; }
+  if (prioridade)    { params.push(prioridade);          q+=` AND t.prioridade=$${params.length}`; }
+  if (de)            { params.push(de);                  q+=` AND t.criado_em::date>=$${params.length}`; }
+  if (ate)           { params.push(ate);                 q+=` AND t.criado_em::date<=$${params.length}`; }
+  if (responsavel_id){ params.push(parseInt(responsavel_id)); q+=` AND t.responsavel_id=$${params.length}`; }
+  q+=' ORDER BY t.criado_em DESC';
+  const { rows } = await pool.query(q, params);
   return rows;
 }
 
-app.get('/api/relatorios/excel', auth, comPredio, async (req, res) => {
+app.get('/api/relatorios/excel', auth, async (req, res) => {
   try {
-    const tickets = await buscarTicketsRelatorio(req.predio_id, req.query);
+    const isAdmin = ['superadmin','admin'].includes(req.user.role);
+    // Determina prédio para o relatório
+    let predioId = parseInt(req.headers['x-predio-id']) || null;
+    if (req.query.predio_id) predioId = parseInt(req.query.predio_id);
+    if (!isAdmin && !predioId) return res.status(400).json({ erro: 'Prédio obrigatório' });
+    // Usuário comum: só seus tickets como responsável
+    const filtros = { ...req.query };
+    if (!isAdmin) filtros.responsavel_id = req.user.id;
+    const tickets = await buscarTicketsRelatorio(predioId, filtros);
     const { rows: predioRows } = await pool.query('SELECT nome FROM predios WHERE id=$1',[req.predio_id]);
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Operação JFL Inc';
@@ -703,10 +714,16 @@ app.get('/api/relatorios/excel', auth, comPredio, async (req, res) => {
   } catch(e) { console.error(e); res.status(500).json({erro:'Erro ao gerar Excel'}); }
 });
 
-app.get('/api/relatorios/pdf', auth, comPredio, async (req, res) => {
+app.get('/api/relatorios/pdf', auth, async (req, res) => {
   try {
-    const tickets = await buscarTicketsRelatorio(req.predio_id, req.query);
-    const { rows: predioRows } = await pool.query('SELECT nome FROM predios WHERE id=$1',[req.predio_id]);
+    const isAdmin = ['superadmin','admin'].includes(req.user.role);
+    let predioId = parseInt(req.headers['x-predio-id']) || null;
+    if (req.query.predio_id) predioId = parseInt(req.query.predio_id);
+    if (!isAdmin && !predioId) return res.status(400).json({ erro: 'Prédio obrigatório' });
+    const filtros = { ...req.query };
+    if (!isAdmin) filtros.responsavel_id = req.user.id;
+    const tickets = await buscarTicketsRelatorio(predioId, filtros);
+    const { rows: predioRows } = await pool.query('SELECT nome FROM predios WHERE id=$1',[predioId||0]);
     const predioNome = predioRows[0]?.nome||'Prédio';
     const doc = new PDFDocument({margin:40,size:'A4'});
     res.setHeader('Content-Type','application/pdf');
@@ -737,6 +754,42 @@ app.get('/api/relatorios/pdf', auth, comPredio, async (req, res) => {
     if(!tickets.length) doc.moveDown(2).fontSize(13).fillColor('#A09D98').text('Nenhum ticket encontrado.',{align:'center'});
     doc.end();
   } catch(e) { console.error(e); res.status(500).json({erro:'Erro ao gerar PDF'}); }
+});
+
+// ══════════════════════════════════════════════════════════════
+// CATEGORIAS
+// ══════════════════════════════════════════════════════════════
+
+const CATEGORIAS_PADRAO = [
+  'Manutenção','Limpeza / Governança','Portaria / Acesso','Internet / TV',
+  'Climatização / AC','Hidráulica','Elétrica','Solicitação de serviço','Reclamação','Outro'
+];
+
+app.get('/api/categorias', auth, comPredio, async (req, res) => {
+  const { rows } = await pool.query(
+    'SELECT id, nome FROM categorias_predios WHERE predio_id=$1 AND ativo=TRUE ORDER BY nome',
+    [req.predio_id]
+  );
+  // Se não tem categorias customizadas, retorna padrão
+  if (!rows.length) return res.json(CATEGORIAS_PADRAO.map(n => ({ nome: n })));
+  res.json(rows);
+});
+
+app.post('/api/categorias', auth, comPredio, adminOnly, async (req, res) => {
+  const { nome } = req.body;
+  if (!nome?.trim()) return res.status(400).json({ erro: 'Nome obrigatório' });
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO categorias_predios (predio_id, nome) VALUES ($1,$2) ON CONFLICT (predio_id,nome) DO UPDATE SET ativo=TRUE RETURNING *',
+      [req.predio_id, nome.trim()]
+    );
+    res.status(201).json(rows[0]);
+  } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
+});
+
+app.delete('/api/categorias/:id', auth, comPredio, adminOnly, async (req, res) => {
+  await pool.query('UPDATE categorias_predios SET ativo=FALSE WHERE id=$1 AND predio_id=$2', [req.params.id, req.predio_id]);
+  res.json({ ok: true });
 });
 
 // ══════════════════════════════════════════════════════════════
@@ -844,6 +897,38 @@ app.get('/api/stats', auth, async (req, res) => {
   res.json({aberto:parseInt(a.rows[0].count),andamento:parseInt(b.rows[0].count),resolvido:parseInt(c.rows[0].count),hoje:parseInt(d.rows[0].count)});
 });
 
+// DELETE ticket — superadmin only
+app.delete('/api/tickets/:id', auth, async (req, res) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ erro: 'Apenas superadmin' });
+  const { rows } = await pool.query('SELECT id FROM tickets WHERE id=$1', [req.params.id]);
+  if (!rows[0]) return res.status(404).json({ erro: 'Não encontrado' });
+  await pool.query('DELETE FROM tickets WHERE id=$1', [req.params.id]);
+  res.json({ ok: true });
+});
+
+// PATCH ticket — editar campos (superadmin/admin)
+app.patch('/api/tickets/:id', auth, adminOnly, async (req, res) => {
+  const { titulo, descricao, categoria, local, prioridade, prazo, responsavel_id } = req.body;
+  try {
+    let responsavel_nome = null;
+    if (responsavel_id) {
+      const { rows: ru } = await pool.query('SELECT nome FROM usuarios WHERE id=$1', [responsavel_id]);
+      responsavel_nome = ru[0]?.nome || null;
+    }
+    const { rows } = await pool.query(
+      `UPDATE tickets SET
+        titulo=COALESCE($1,titulo), descricao=COALESCE($2,descricao),
+        categoria=COALESCE($3,categoria), local=COALESCE($4,local),
+        prioridade=COALESCE($5,prioridade), prazo=COALESCE($6::date,prazo),
+        responsavel_id=COALESCE($7,responsavel_id), responsavel_nome=COALESCE($8,responsavel_nome),
+        atualizado_em=NOW()
+       WHERE id=$9 RETURNING *`,
+      [titulo,descricao,categoria,local,prioridade,prazo||null,responsavel_id||null,responsavel_nome,req.params.id]
+    );
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
+});
+
 // ── SPA FALLBACK ──────────────────────────────────────────────
 app.get('*',(_, res)=>res.sendFile(path.join(__dirname,'public/index.html')));
 
@@ -908,7 +993,7 @@ async function migrate() {
       CREATE TABLE IF NOT EXISTS tickets (
         id SERIAL PRIMARY KEY, predio_id INTEGER NOT NULL REFERENCES predios(id) ON DELETE CASCADE,
         titulo TEXT NOT NULL, descricao TEXT, categoria TEXT, local TEXT, origem TEXT,
-        prioridade TEXT NOT NULL DEFAULT 'Média' CHECK (prioridade IN ('Baixa','Média','Alta')),
+        prioridade TEXT NOT NULL DEFAULT 'Média' CHECK (prioridade IN ('Baixa','Média','Alta','Urgente')),
         status TEXT NOT NULL DEFAULT 'aberto' CHECK (status IN ('aberto','em andamento','feedback ao cliente','resolvido','cancelado')),
         autor_id INTEGER REFERENCES usuarios(id), autor_nome TEXT,
         responsavel_id INTEGER REFERENCES usuarios(id), responsavel_nome TEXT,
@@ -938,6 +1023,13 @@ async function migrate() {
         label     TEXT NOT NULL,
         ativo     BOOLEAN DEFAULT TRUE
       );
+      CREATE TABLE IF NOT EXISTS categorias_predios (
+        id        SERIAL PRIMARY KEY,
+        predio_id INTEGER NOT NULL REFERENCES predios(id) ON DELETE CASCADE,
+        nome      TEXT NOT NULL,
+        ativo     BOOLEAN DEFAULT TRUE,
+        UNIQUE(predio_id, nome)
+      );
       CREATE TABLE IF NOT EXISTS sla_config (
         id SERIAL PRIMARY KEY,
         predio_id INTEGER NOT NULL REFERENCES predios(id) ON DELETE CASCADE,
@@ -953,6 +1045,12 @@ async function migrate() {
       ALTER TABLE tickets DROP CONSTRAINT IF EXISTS tickets_status_check;
       ALTER TABLE tickets ADD CONSTRAINT tickets_status_check
         CHECK (status IN ('aberto','em andamento','feedback ao cliente','resolvido','cancelado'));
+    `);
+    // Atualiza constraint de prioridade para incluir 'Urgente'
+    await client.query(`
+      ALTER TABLE tickets DROP CONSTRAINT IF EXISTS tickets_prioridade_check;
+      ALTER TABLE tickets ADD CONSTRAINT tickets_prioridade_check
+        CHECK (prioridade IN ('Baixa','Média','Alta','Urgente'));
     `);
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_tickets_predio_status ON tickets(predio_id,status);
