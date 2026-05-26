@@ -290,6 +290,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 </div>
 
 <!-- APP -->
+<!-- BARRA OFFLINE -->
+<div id="offline-bar" style="display:none;position:fixed;top:0;left:0;right:0;background:#92590A;color:#fff;padding:8px 16px;font-size:13px;z-index:1000;align-items:center;justify-content:center;gap:8px;">
+  <span>⚡</span> Sem conexao — tickets criados serao enviados quando voltar o sinal
+</div>
 <div id="app">
   <div class="topbar">
     <div class="topbar-left">
@@ -459,6 +463,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
           <button class="admin-tab" id="atab-predios" onclick="showAdminTab('predios',this)" style="flex:1;padding:9px;border:none;border-radius:var(--radius);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;background:none;color:var(--text2);transition:all .15s;">🏢 Prédios</button>
           <button class="admin-tab" id="atab-kpis" onclick="showAdminTab('kpis',this)" style="flex:1;padding:9px;border:none;border-radius:var(--radius);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;background:none;color:var(--text2);transition:all .15s;">📊 KPIs</button>
           <button class="admin-tab" id="atab-categorias" onclick="showAdminTab('categorias',this)" style="flex:1;padding:9px;border:none;border-radius:var(--radius);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;background:none;color:var(--text2);transition:all .15s;">🏷️ Cats</button>
+          <button class="admin-tab" id="atab-templates" onclick="showAdminTab('templates',this)" style="flex:1;padding:9px;border:none;border-radius:var(--radius);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;background:none;color:var(--text2);transition:all .15s;">📋 Templates</button>
         </div>
 
         <!-- ABA: USUÁRIOS -->
@@ -510,6 +515,37 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
           <div id="admin-cats-list" style="font-size:13px;color:var(--text2);text-align:center;padding:20px;">Selecione um prédio para ver as categorias.</div>
         </div>
       </div>
+
+        <!-- ABA: TEMPLATES -->
+        <div id="admin-tab-templates" style="display:none;">
+          <div style="margin-bottom:14px;">
+            <div style="font-size:14px;font-weight:600;margin-bottom:4px;">Templates de ticket</div>
+            <div style="font-size:12px;color:var(--text2);">Crie templates para problemas frequentes. Ao abrir um ticket, o operador escolhe o template e os campos ja vem preenchidos.</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;margin-bottom:16px;">
+            <div style="font-size:13px;font-weight:600;margin-bottom:12px;">Novo template</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div class="field" style="margin:0;"><label>Nome do template</label><input type="text" id="tpl-nome" placeholder="Ex: AC nao refrigera"></div>
+              <div class="field" style="margin:0;"><label>Categoria</label>
+                <select id="tpl-cat">
+                  <option value="">Selecionar...</option>
+                  <option>Manutencao</option><option>Limpeza / Governanca</option>
+                  <option>Portaria / Acesso</option><option>Internet / TV</option>
+                  <option>Climatizacao / AC</option><option>Hidraulica</option>
+                  <option>Eletrica</option><option>Solicitacao de servico</option>
+                  <option>Reclamacao</option><option>Outro</option>
+                </select>
+              </div>
+              <div class="field" style="margin:0;"><label>Prioridade padrao</label>
+                <select id="tpl-prio"><option>Baixa</option><option selected>Media</option><option>Alta</option><option>Urgente</option></select>
+              </div>
+              <div class="field" style="margin:0;"><label>SLA (horas)</label><input type="number" id="tpl-sla" placeholder="Ex: 24" min="1" max="720"></div>
+            </div>
+            <div class="field" style="margin:10px 0 0;"><label>Descricao padrao</label><textarea id="tpl-desc" placeholder="Descricao que vem pre-preenchida..." style="min-height:60px;"></textarea></div>
+            <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="criarTemplate()">+ Criar template</button>
+          </div>
+          <div id="admin-templates-list"><div class="loader">Carregando...</div></div>
+        </div>
 
       <!-- TEAM (mantido para compatibilidade, oculto) -->
       <div class="screen" id="screen-team" style="display:none!important;">
@@ -680,6 +716,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     <div class="drawer-body">
       <div class="drawer-title">Abrir ticket</div>
       <div class="field"><label>Aberto por</label><input type="text" id="n-autor" readonly></div>
+      <div id="n-templates-field" style="display:none;margin-bottom:14px;">
+        <label style="display:block;font-size:11px;font-weight:600;color:var(--text2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.07em;">Template rapido</label>
+        <div id="n-templates-list" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+      </div>
       <div class="field"><label>Origem</label>
         <select id="n-origem">
           <option value="">Selecionar...</option>
@@ -703,6 +743,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         <select id="n-unidade" onchange="selecionarUnidade(this.value)">
           <option value="">Selecionar unidade...</option>
         </select>
+        <div id="n-unidade-hist" style="display:none;margin-top:8px;background:var(--amber-bg);border:1px solid #e8d0a8;border-radius:var(--radius);padding:10px 12px;">
+          <div style="font-size:11px;font-weight:600;color:var(--amber);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">⚠️ Chamados anteriores nesta unidade</div>
+          <div id="n-unidade-hist-list" style="font-size:12px;color:var(--text2);"></div>
+        </div>
       </div>
       <div class="field">
         <label>Local / Complemento</label>
@@ -802,6 +846,17 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
   </div>
 </div>
 
+<!-- BANNER PWA -->
+<div id="pwa-banner" style="display:none;position:fixed;bottom:calc(80px + env(safe-area-inset-bottom,0px));left:12px;right:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;box-shadow:0 8px 32px rgba(0,0,0,.15);z-index:400;display:none;align-items:center;gap:12px;">
+  <div style="width:40px;height:40px;background:#1A1917;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;">⬡</div>
+  <div style="flex:1;min-width:0;">
+    <div style="font-size:14px;font-weight:600;">Instalar app</div>
+    <div style="font-size:12px;color:var(--text2);">Acesso rapido na tela inicial</div>
+  </div>
+  <button onclick="instalarPWA()" style="background:#1A1917;color:#fff;border:none;padding:8px 14px;border-radius:var(--radius);font-family:var(--font);font-size:13px;cursor:pointer;white-space:nowrap;">Instalar</button>
+  <button onclick="fecharBannerPWA()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:20px;padding:4px;">×</button>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -809,6 +864,18 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 // ESTADO
 // ════════════════════════════════════════════════
 let token       = localStorage.getItem('op_token') || null;
+let offlineQueue = JSON.parse(localStorage.getItem('offline_queue')||'[]');
+let isOnline    = navigator.onLine;
+
+// Indica status de conexão
+function updateOnlineStatus() {
+  isOnline = navigator.onLine;
+  const bar = document.getElementById('offline-bar');
+  if (bar) bar.style.display = isOnline ? 'none' : 'flex';
+  if (isOnline && offlineQueue.length > 0) syncOfflineQueue();
+}
+window.addEventListener('online',  updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
 let currentUser = null;     // { id, nome, email, cargo, role, predios[] }
 let predioAtivo = null;     // { id, nome, slug }
 let allTickets  = [];
@@ -1182,9 +1249,13 @@ function setFilter(f, el) {
   renderList();
 }
 function showNewTicket() {
+  if (!predioAtivo) { showToast('Selecione um predio primeiro'); showPredioSelector(); return; }
   document.getElementById('n-msg').textContent='';
-  document.getElementById('n-autor').value = currentUser.nome + (currentUser.cargo?' – '+currentUser.cargo:'');
+  document.getElementById('n-autor').value = currentUser.nome + (currentUser.cargo?' - '+currentUser.cargo:'');
+  const hist = document.getElementById('n-unidade-hist');
+  if (hist) hist.style.display = 'none';
   carregarUnidadesForm();
+  carregarTemplates();
   document.getElementById('overlay-novo').classList.add('open');
 }
 
@@ -1203,9 +1274,12 @@ async function carregarUnidadesForm() {
 }
 
 function selecionarUnidade(label) {
-  // Se selecionou uma unidade, limpa o campo de local/complemento
   if (label) {
-    document.getElementById('n-local').placeholder = 'Ex: Área comum, corredor, garagem...';
+    document.getElementById('n-local').placeholder = 'Ex: Area comum, corredor, garagem...';
+    buscarHistoricoUnidade(label);
+  } else {
+    const hist = document.getElementById('n-unidade-hist');
+    if (hist) hist.style.display = 'none';
   }
 }
 async function criarTicket() {
@@ -1219,7 +1293,17 @@ async function criarTicket() {
   const prazo  = document.getElementById('n-prazo').value || null;
   const respId = document.getElementById('n-resp').value || null;
   const msg    = document.getElementById('n-msg');
-  if (!predioAtivo) { msg.className='msg-error'; msg.textContent='Selecione um prédio específico para abrir um ticket.'; return; }
+  if (!predioAtivo) { msg.className='msg-error'; msg.textContent='Selecione um predio especifico para abrir um ticket.'; return; }
+
+  // Modo offline
+  if (!isOnline) {
+    const payload = { titulo, descricao:desc, categoria:cat, local, origem, prioridade:prio, prazo, responsavel_id:respId };
+    offlineQueue.push(payload);
+    localStorage.setItem('offline_queue', JSON.stringify(offlineQueue));
+    msg.className='msg-ok'; msg.textContent='Ticket salvo offline! Sera enviado quando reconectar.';
+    setTimeout(()=>{ msg.textContent=''; closeOverlayById('overlay-novo'); },2000);
+    return;
+  }
   if (!origem||!cat||!desc) { msg.className='msg-error'; msg.textContent='Preencha origem, categoria e descrição.'; return; }
   const titulo = cat + (local?' – '+local:'');
   try {
@@ -1338,9 +1422,15 @@ async function openDetail(id) {
     <div style="margin-top:16px;">
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Registrar update</div>
       <div class="update-row">
-        <input type="text" id="upd-txt" placeholder="O que foi feito / próximo passo...">
+        <input type="text" id="upd-txt" placeholder="O que foi feito / proximo passo...">
         <button class="btn btn-primary" style="width:auto;padding:10px 16px;white-space:nowrap;" onclick="addUpdate(${id})">Salvar</button>
       </div>
+      <div id="escalar-box-${id}" style="display:none;margin-top:10px;background:var(--purple-bg);border-radius:var(--radius);padding:12px;">
+        <div style="font-size:12px;font-weight:600;color:var(--purple);margin-bottom:8px;">⚡ Escalar chamado</div>
+        <input type="text" id="escalar-txt-${id}" placeholder="Para qual equipe/area escalar? (ex: Manutencao predial)" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:var(--font);margin-bottom:8px;">
+        <button onclick="escalarTicket(${id})" style="background:var(--purple);color:#fff;border:none;padding:8px 16px;border-radius:var(--radius);font-family:var(--font);font-size:13px;cursor:pointer;">Confirmar escalada</button>
+      </div>
+      \${currentUser?.role !== 'membro' ? \`<button onclick="document.getElementById('escalar-box-\${id}').style.display=document.getElementById('escalar-box-\${id}').style.display==='none'?'block':'none'" style="margin-top:8px;background:none;border:1px solid var(--purple);color:var(--purple);padding:6px 12px;border-radius:var(--radius);font-family:var(--font);font-size:12px;cursor:pointer;">⚡ Escalar chamado</button>\` : ''}
     </div>
     <div class="divider"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
@@ -1817,6 +1907,187 @@ async function trocarSenha() {
 }
 
 // ════════════════════════════════════════════════
+// PWA INSTALL BANNER
+// ════════════════════════════════════════════════
+let _deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _deferredPrompt = e;
+  const shown = localStorage.getItem('pwa_banner_dismissed');
+  if (!shown) {
+    setTimeout(() => {
+      const b = document.getElementById('pwa-banner');
+      if (b) b.style.display = 'flex';
+    }, 3000);
+  }
+});
+
+async function instalarPWA() {
+  if (!_deferredPrompt) return;
+  _deferredPrompt.prompt();
+  const { outcome } = await _deferredPrompt.userChoice;
+  _deferredPrompt = null;
+  fecharBannerPWA();
+  if (outcome === 'accepted') showToast('App instalado!');
+}
+
+function fecharBannerPWA() {
+  const b = document.getElementById('pwa-banner');
+  if (b) b.style.display = 'none';
+  localStorage.setItem('pwa_banner_dismissed', '1');
+}
+
+// ════════════════════════════════════════════════
+// MODO OFFLINE
+// ════════════════════════════════════════════════
+async function syncOfflineQueue() {
+  if (!offlineQueue.length || !token) return;
+  showToast(`Sincronizando ${offlineQueue.length} ticket(s) offline...`);
+  const queue = [...offlineQueue];
+  offlineQueue = [];
+  localStorage.setItem('offline_queue', '[]');
+  for (const item of queue) {
+    try {
+      const opts = {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+token,
+                   ...(predioAtivo ? {'x-predio-id': String(predioAtivo.id)} : {}) },
+        body: JSON.stringify(item)
+      };
+      await fetch('/api/tickets', opts);
+    } catch(e) {
+      offlineQueue.push(item);
+    }
+  }
+  localStorage.setItem('offline_queue', JSON.stringify(offlineQueue));
+  if (!offlineQueue.length) {
+    await loadStats(); await loadTickets(); renderDashboard(); renderList();
+    showToast('Tickets sincronizados!');
+  }
+}
+
+// ════════════════════════════════════════════════
+// TEMPLATES
+// ════════════════════════════════════════════════
+let templatesList = [];
+
+async function carregarTemplates() {
+  try {
+    templatesList = await GET('/api/templates');
+    renderTemplatesNoForm();
+  } catch(e) { templatesList = []; }
+}
+
+function renderTemplatesNoForm() {
+  const el = document.getElementById('n-templates-list');
+  const field = document.getElementById('n-templates-field');
+  if (!el || !field) return;
+  if (!templatesList.length) { field.style.display='none'; return; }
+  field.style.display = 'block';
+  el.innerHTML = templatesList.map(t => `
+    <button onclick="aplicarTemplate(${t.id})" style="padding:6px 12px;border-radius:99px;border:1px solid var(--border);background:var(--surface);font-family:var(--font);font-size:12px;cursor:pointer;transition:all .12s;white-space:nowrap;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+      ${t.nome}
+    </button>`).join('');
+}
+
+function aplicarTemplate(id) {
+  const t = templatesList.find(x => x.id === id);
+  if (!t) return;
+  const catEl = document.getElementById('n-cat');
+  const descEl = document.getElementById('n-desc');
+  const prioEl = document.getElementById('n-prio');
+  const prazoEl = document.getElementById('n-prazo');
+  if (catEl) catEl.value = t.categoria;
+  if (descEl && t.descricao) descEl.value = t.descricao;
+  if (prioEl) prioEl.value = t.prioridade || 'Media';
+  if (prazoEl && t.prazo_horas && !prazoEl.value) {
+    prazoEl.value = new Date(Date.now() + t.prazo_horas*3600000).toISOString().split('T')[0];
+  }
+  showToast(`Template "${t.nome}" aplicado!`);
+  if (t.categoria) sugerirPrazoSLA(t.categoria);
+}
+
+// Admin: gerenciar templates
+async function carregarTemplatesAdmin() {
+  const el = document.getElementById('admin-templates-list');
+  if (!el) return;
+  el.innerHTML = '<div class="loader">Carregando...</div>';
+  try {
+    const lista = await GET('/api/templates');
+    if (!lista.length) { el.innerHTML = '<div style="font-size:13px;color:var(--text2);text-align:center;padding:20px;">Nenhum template criado ainda.</div>'; return; }
+    el.innerHTML = lista.map(t => `
+      <div class="member-card">
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:600;">${t.nome}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px;">${t.categoria} · ${t.prioridade}${t.prazo_horas?' · '+t.prazo_horas+'h SLA':''}</div>
+          ${t.descricao?`<div style="font-size:12px;color:var(--text3);margin-top:2px;">"${t.descricao.slice(0,60)}${t.descricao.length>60?'…':''}"</div>`:''}
+        </div>
+        <button class="btn btn-ghost btn-sm btn-danger" onclick="removerTemplate(${t.id})">Remover</button>
+      </div>`).join('');
+  } catch(e) { el.innerHTML = '<div style="text-align:center;color:var(--red);padding:20px;">Erro ao carregar.</div>'; }
+}
+
+async function criarTemplate() {
+  const nome  = document.getElementById('tpl-nome')?.value.trim();
+  const cat   = document.getElementById('tpl-cat')?.value;
+  const prio  = document.getElementById('tpl-prio')?.value;
+  const sla   = document.getElementById('tpl-sla')?.value;
+  const desc  = document.getElementById('tpl-desc')?.value.trim();
+  if (!nome || !cat) { showToast('Nome e categoria sao obrigatorios'); return; }
+  try {
+    await POST('/api/templates', { nome, categoria:cat, prioridade:prio, prazo_horas:sla?parseInt(sla):null, descricao:desc||null });
+    ['tpl-nome','tpl-sla','tpl-desc'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+    document.getElementById('tpl-cat').value='';
+    await carregarTemplatesAdmin();
+    await carregarTemplates();
+    showToast('Template criado!');
+  } catch(e) { showToast('Erro: '+e.message); }
+}
+
+async function removerTemplate(id) {
+  if (!confirm('Remover este template?')) return;
+  try { await DEL(`/api/templates/${id}`); await carregarTemplatesAdmin(); await carregarTemplates(); showToast('Template removido'); }
+  catch(e) { showToast('Erro: '+e.message); }
+}
+
+// ════════════════════════════════════════════════
+// HISTÓRICO POR UNIDADE
+// ════════════════════════════════════════════════
+async function buscarHistoricoUnidade(label) {
+  const hist = document.getElementById('n-unidade-hist');
+  const list = document.getElementById('n-unidade-hist-list');
+  if (!hist || !list || !label) { if(hist) hist.style.display='none'; return; }
+  try {
+    const tickets = await GET(`/api/unidades/historico?local=${encodeURIComponent(label)}`);
+    if (!tickets.length) { hist.style.display='none'; return; }
+    hist.style.display = 'block';
+    list.innerHTML = tickets.slice(0,5).map(t =>
+      `<div style="padding:4px 0;border-bottom:1px solid rgba(0,0,0,.06);">
+        <span style="font-weight:500;">#${t.id}</span> ${t.categoria} —
+        <span style="color:${t.status==='resolvido'?'var(--green)':t.status==='cancelado'?'var(--text3)':'var(--amber)'};">${t.status}</span>
+        <span style="color:var(--text3);"> · ${new Date(t.criado_em).toLocaleDateString('pt-BR')}</span>
+      </div>`
+    ).join('');
+    if (tickets.length > 5) list.innerHTML += `<div style="font-size:11px;color:var(--text3);padding-top:4px;">+${tickets.length-5} mais no historico</div>`;
+  } catch(e) { hist.style.display='none'; }
+}
+
+// ════════════════════════════════════════════════
+// ESCALADA
+// ════════════════════════════════════════════════
+async function escalarTicket(id) {
+  const txt = document.getElementById(`escalar-txt-${id}`)?.value.trim();
+  if (!txt) { showToast('Informe para onde escalar'); return; }
+  try {
+    await PATCH(`/api/tickets/${id}`, { escalar: txt });
+    document.getElementById(`escalar-box-${id}`).style.display = 'none';
+    await openDetail(id);
+    showToast(`Chamado escalado para: ${txt}`);
+  } catch(e) { showToast('Erro: '+e.message); }
+}
+
+// ════════════════════════════════════════════════
 // PWA — Service Worker + Push Notifications
 // ════════════════════════════════════════════════
 let swRegistration = null;
@@ -2016,7 +2287,7 @@ async function sugerirPrazoSLA(categoria) {
 let todosUsuarios = [];
 
 function showAdminTab(tab, el) {
-  ['usuarios','predios','kpis','categorias'].forEach(t => {
+  ['usuarios','predios','kpis','categorias','templates'].forEach(t => {
     document.getElementById('admin-tab-'+t).style.display = t===tab ? 'block' : 'none';
   });
   document.querySelectorAll('.admin-tab').forEach(b => {
