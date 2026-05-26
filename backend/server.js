@@ -551,8 +551,19 @@ app.patch('/api/tickets/:id/status', auth, async (req, res) => {
   );
   if (!rows[0]) return res.status(404).json({ erro: 'Não encontrado' });
   const t = rows[0];
+  // Registra histórico de status
   await pool.query('INSERT INTO ticket_historico (ticket_id,mensagem,autor_id,autor_nome) VALUES ($1,$2,$3,$4)',
     [req.params.id,`Status → ${status}`,req.user.id,req.user.nome]);
+  // Se capturou (em andamento) e não tinha responsável, registra atribuição
+  if (status === 'em andamento' && !t.responsavel_id) {
+    await pool.query(
+      'UPDATE tickets SET responsavel_id=$1, responsavel_nome=$2, atualizado_em=NOW() WHERE id=$3',
+      [req.user.id, req.user.nome, req.params.id]
+    );
+    await pool.query('INSERT INTO ticket_historico (ticket_id,mensagem,autor_id,autor_nome) VALUES ($1,$2,$3,$4)',
+      [req.params.id, `Responsavel: ${req.user.nome} (captura)`, req.user.id, req.user.nome]
+    );
+  }
   if (t.responsavel_id && t.responsavel_id!==req.user.id) {
     const { rows: ru } = await pool.query('SELECT email FROM usuarios WHERE id=$1',[t.responsavel_id]);
     if (ru[0]?.email) enviarEmail(emailStatusAtualizado(t,status,req.user.nome,ru[0].email));
@@ -898,6 +909,37 @@ app.get('/api/unidades', auth, async (req, res) => {
 // SLA CONFIG
 // ══════════════════════════════════════════════════════════════
 
+// ══════════════════════════════════════════════════════════════
+// TEMPLATES
+// ══════════════════════════════════════════════════════════════
+
+app.get('/api/templates', auth, async (req, res) => {
+  const pid = parseInt(req.headers['x-predio-id']) || null;
+  const where = pid ? 'WHERE (predio_id=$1 OR predio_id IS NULL) AND ativo=TRUE' : 'WHERE predio_id IS NULL AND ativo=TRUE';
+  const params = pid ? [pid] : [];
+  const { rows } = await pool.query(
+    `SELECT * FROM ticket_templates ${where} ORDER BY nome`, params
+  );
+  res.json(rows);
+});
+
+app.post('/api/templates', auth, adminOnly, async (req, res) => {
+  const pid = parseInt(req.headers['x-predio-id']) || null;
+  const { nome, categoria, titulo, descricao, prioridade, prazo_horas } = req.body;
+  if (!nome || !categoria) return res.status(400).json({ erro: 'Nome e categoria obrigatorios' });
+  const { rows } = await pool.query(
+    `INSERT INTO ticket_templates (predio_id,nome,categoria,titulo,descricao,prioridade,prazo_horas)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [pid, nome, categoria, titulo||null, descricao||null, prioridade||'Média', prazo_horas||null]
+  );
+  res.status(201).json(rows[0]);
+});
+
+app.delete('/api/templates/:id', auth, adminOnly, async (req, res) => {
+  await pool.query('UPDATE ticket_templates SET ativo=FALSE WHERE id=$1', [req.params.id]);
+  res.json({ ok: true });
+});
+
 // GET /api/sla — retorna config SLA do prédio
 app.get('/api/sla', auth, comPredio, async (req, res) => {
   const { rows } = await pool.query(
@@ -1016,6 +1058,28 @@ app.get('/api/tickets/:id', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
 });
 
+// GET /api/unidades/:label/historico — tickets anteriores de uma unidade
+app.get('/api/unidades/historico', auth, async (req, res) => {
+  const { local } = req.query;
+  if (!local) return res.json([]);
+  const pid = parseInt(req.headers['x-predio-id']) || null;
+  const isAdmin = ['superadmin','admin'].includes(req.user.role);
+  try {
+    const params = [local+'%'];
+    let where = 't.local ILIKE $1';
+    if (pid) { params.push(pid); where += ` AND t.predio_id=$${params.length}`; }
+    const { rows } = await pool.query(
+      `SELECT t.id, t.titulo, t.categoria, t.status, t.prioridade, t.local,
+              t.autor_nome, t.responsavel_nome, t.criado_em, p.nome as predio_nome
+       FROM tickets t JOIN predios p ON p.id=t.predio_id
+       WHERE ${where}
+       ORDER BY t.criado_em DESC LIMIT 10`,
+      params
+    );
+    res.json(rows);
+  } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
+});
+
 // DELETE ticket — superadmin only
 app.delete('/api/tickets/:id', auth, async (req, res) => {
   if (req.user.role !== 'superadmin') return res.status(403).json({ erro: 'Apenas superadmin' });
@@ -1027,8 +1091,12 @@ app.delete('/api/tickets/:id', auth, async (req, res) => {
 
 // PATCH ticket — editar campos (superadmin/admin)
 app.patch('/api/tickets/:id', auth, adminOnly, async (req, res) => {
-  const { titulo, descricao, categoria, local, prioridade, prazo, responsavel_id } = req.body;
+  const { titulo, descricao, categoria, local, prioridade, prazo, responsavel_id, escalar } = req.body;
   try {
+    // Busca ticket atual para comparar responsável
+    const { rows: old } = await pool.query('SELECT * FROM tickets WHERE id=$1', [req.params.id]);
+    if (!old[0]) return res.status(404).json({ erro: 'Nao encontrado' });
+
     let responsavel_nome = null;
     if (responsavel_id) {
       const { rows: ru } = await pool.query('SELECT nome FROM usuarios WHERE id=$1', [responsavel_id]);
@@ -1044,8 +1112,38 @@ app.patch('/api/tickets/:id', auth, adminOnly, async (req, res) => {
        WHERE id=$9 RETURNING *`,
       [titulo,descricao,categoria,local,prioridade,prazo||null,responsavel_id||null,responsavel_nome,req.params.id]
     );
-    res.json(rows[0]);
-  } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
+    const t = rows[0];
+
+    // Registra mudança de responsável no histórico
+    if (responsavel_id && responsavel_id !== old[0].responsavel_id) {
+      const oldNome = old[0].responsavel_nome || 'ninguem';
+      const newNome = responsavel_nome || 'ninguem';
+      await pool.query(
+        'INSERT INTO ticket_historico (ticket_id,mensagem,autor_id,autor_nome) VALUES ($1,$2,$3,$4)',
+        [t.id, `Responsavel alterado: ${oldNome} → ${newNome}`, req.user.id, req.user.nome]
+      );
+      // Notifica novo responsável
+      if (responsavel_id !== req.user.id) {
+        const { rows: ru2 } = await pool.query('SELECT email FROM usuarios WHERE id=$1', [responsavel_id]);
+        if (ru2[0]?.email) enviarEmail({
+          to: ru2[0].email,
+          subject: `[JFL] Ticket #${t.id} atribuido a voce`,
+          html: `<p>O ticket <strong>#${t.id} - ${t.titulo}</strong> foi atribuido a voce por ${req.user.nome}.</p>`
+        });
+        enviarPush(responsavel_id, 'Ticket atribuido!', `#${t.id} - ${t.titulo}`);
+      }
+    }
+
+    // Registra escalada no histórico
+    if (escalar) {
+      await pool.query(
+        'INSERT INTO ticket_historico (ticket_id,mensagem,autor_id,autor_nome) VALUES ($1,$2,$3,$4)',
+        [t.id, `Ticket escalado para: ${escalar} por ${req.user.nome}`, req.user.id, req.user.nome]
+      );
+    }
+
+    res.json(t);
+  } catch(e) { console.error(e); res.status(500).json({ erro: 'Erro interno' }); }
 });
 
 // ══════════════════════════════════════════════════════════════
@@ -1472,6 +1570,18 @@ async function migrate() {
         nome      TEXT NOT NULL,
         ativo     BOOLEAN DEFAULT TRUE,
         UNIQUE(predio_id, nome)
+      );
+      CREATE TABLE IF NOT EXISTS ticket_templates (
+        id        SERIAL PRIMARY KEY,
+        predio_id INTEGER REFERENCES predios(id) ON DELETE CASCADE,
+        nome      TEXT NOT NULL,
+        categoria TEXT NOT NULL,
+        titulo    TEXT,
+        descricao TEXT,
+        prioridade TEXT DEFAULT 'Média',
+        prazo_horas INTEGER,
+        ativo     BOOLEAN DEFAULT TRUE,
+        criado_em TIMESTAMPTZ DEFAULT NOW()
       );
       CREATE TABLE IF NOT EXISTS sla_config (
         id SERIAL PRIMARY KEY,
