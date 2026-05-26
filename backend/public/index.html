@@ -474,17 +474,21 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 
         <!-- ABA: CATEGORIAS -->
         <div id="admin-tab-categorias" style="display:none;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-            <div>
-              <div style="font-size:14px;font-weight:600;">Categorias de ticket</div>
-              <div style="font-size:12px;color:var(--text2);margin-top:2px;">Personalize por prédio</div>
-            </div>
+          <div style="margin-bottom:14px;">
+            <div style="font-size:14px;font-weight:600;margin-bottom:4px;">Categorias de ticket</div>
+            <div style="font-size:12px;color:var(--text2);">Personalize por prédio. Categorias padrão aparecem quando não há customizadas.</div>
+          </div>
+          <div class="field" style="margin-bottom:12px;">
+            <label>Prédio</label>
+            <select id="cat-predio-sel" onchange="carregarCategoriasAdmin()">
+              <option value="">Selecionar prédio...</option>
+            </select>
           </div>
           <div style="display:flex;gap:8px;margin-bottom:16px;">
             <input type="text" id="cat-nova-nome" placeholder="Nome da nova categoria..." class="search-input" style="flex:1;">
             <button class="btn btn-ghost btn-sm" onclick="adicionarCategoria()" style="white-space:nowrap;">+ Adicionar</button>
           </div>
-          <div id="admin-cats-list"><div class="loader">Carregando...</div></div>
+          <div id="admin-cats-list" style="font-size:13px;color:var(--text2);text-align:center;padding:20px;">Selecione um prédio para ver as categorias.</div>
         </div>
       </div>
 
@@ -538,15 +542,33 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
             </div>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          <button class="btn btn-primary" onclick="exportar('excel')" style="display:flex;align-items:center;justify-content:center;gap:8px;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-            Excel (.xlsx)
-          </button>
-          <button class="btn btn-ghost" onclick="exportar('pdf')" style="display:flex;align-items:center;justify-content:center;gap:8px;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            PDF
-          </button>
+        <div style="margin-bottom:8px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Relatório de tickets</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <button class="btn btn-primary" onclick="exportar('excel')" style="display:flex;align-items:center;justify-content:center;gap:8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+              Excel (.xlsx)
+            </button>
+            <button class="btn btn-ghost" onclick="exportar('pdf')" style="display:flex;align-items:center;justify-content:center;gap:8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              PDF
+            </button>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div style="margin-bottom:8px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">📊 Relatório de KPIs</div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.5;">Indicadores de produtividade por responsável, categoria e prédio — com taxa de resolução, tempo médio e cumprimento de SLA.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <button class="btn btn-primary" onclick="exportarKPI('excel')" style="display:flex;align-items:center;justify-content:center;gap:8px;background:#1A4F8A;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+              KPIs Excel
+            </button>
+            <button class="btn btn-ghost" onclick="exportarKPI('pdf')" style="display:flex;align-items:center;justify-content:center;gap:8px;border-color:#1A4F8A;color:#1A4F8A;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              KPIs PDF
+            </button>
+          </div>
         </div>
         <div id="rel-msg" style="margin-top:12px;font-size:13px;text-align:center;"></div>
 
@@ -1448,6 +1470,34 @@ function renderTeam(){
 // ════════════════════════════════════════════════
 // RELATÓRIOS
 // ════════════════════════════════════════════════
+function exportarKPI(tipo) {
+  const de     = document.getElementById('rel-de')?.value || '';
+  const ate    = document.getElementById('rel-ate')?.value || '';
+  const predio = document.getElementById('rel-predio')?.value || '';
+  const resp   = document.getElementById('rel-responsavel')?.value || '';
+  const msg    = document.getElementById('rel-msg');
+  msg.textContent = 'Gerando relatório de KPIs...'; msg.className = '';
+  const params = new URLSearchParams();
+  if (de)     params.set('de', de);
+  if (ate)    params.set('ate', ate);
+  if (predio) params.set('predio_id', predio);
+  if (resp)   params.set('responsavel_id', resp);
+  fetch(`/api/relatorios/kpi/${tipo}?${params}`, {
+    headers: { 'Authorization':'Bearer '+token, ...(predioAtivo ? {'x-predio-id': String(predioAtivo.id)} : {}) }
+  }).then(r => {
+    if (!r.ok) throw new Error('Erro ao gerar KPI');
+    return r.blob();
+  }).then(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `kpi-${new Date().toISOString().slice(0,10)}.${tipo==='excel'?'xlsx':'pdf'}`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    msg.className='msg-ok'; msg.textContent='✓ KPI gerado!';
+    setTimeout(()=>msg.textContent='',3000);
+  }).catch(e=>{ msg.className='msg-error'; msg.textContent=e.message; });
+}
+
 function inicializarFiltrosRelatorio() {
   const isAdmin = currentUser && ['admin','superadmin'].includes(currentUser.role);
   // Mostra filtros de prédio e responsável só para admins
@@ -1823,33 +1873,76 @@ function showAdminTab(tab, el) {
   if (tab==='usuarios')   carregarTodosUsuarios();
   if (tab==='predios')    carregarPrediosAdmin();
   if (tab==='kpis')       carregarKPIs();
-  if (tab==='categorias') carregarCategoriasAdmin();
+  if (tab==='categorias') { initCatsPredioSel(); }
 }
 
 // ── CATEGORIAS ────────────────────────────────
 async function carregarCategoriasAdmin() {
   const el = document.getElementById('admin-cats-list');
   if (!el) return;
+  const predioSel = document.getElementById('cat-predio-sel');
+  const pid = predioSel?.value;
+  if (!pid) {
+    el.innerHTML = '<div style="font-size:13px;color:var(--text2);text-align:center;padding:20px;">Selecione um prédio para ver as categorias.</div>';
+    return;
+  }
   el.innerHTML = '<div class="loader">Carregando...</div>';
   try {
-    const cats = await GET('/api/categorias');
+    const opts = { headers: { 'Authorization':'Bearer '+token, 'x-predio-id': pid } };
+    const res = await fetch('/api/categorias', opts);
+    const cats = await res.json();
     if (!cats.length) { el.innerHTML = emptyState('Nenhuma categoria cadastrada.'); return; }
     el.innerHTML = cats.map(c => `
       <div class="member-card">
         <div style="font-size:14px;font-weight:500;">${c.nome}</div>
-        ${c.id ? `<button class="btn btn-ghost btn-sm btn-danger" onclick="removerCategoria(${c.id})">Remover</button>` : '<span style="font-size:11px;color:var(--text3);">padrão</span>'}
+        ${c.id
+          ? `<button class="btn btn-ghost btn-sm btn-danger" onclick="removerCategoria(${c.id})">Remover</button>`
+          : `<button class="btn btn-ghost btn-sm" onclick="adicionarCategoriaCustom('${c.nome.replace(/'/g,"\'")}',${pid})">+ Personalizar</button>`}
       </div>`).join('');
   } catch(e) { el.innerHTML = emptyState('Erro ao carregar.'); }
 }
 
+function initCatsPredioSel() {
+  const sel = document.getElementById('cat-predio-sel');
+  if (!sel) return;
+  const predios = currentUser?.predios || allPredios || [];
+  sel.innerHTML = '<option value="">Selecionar prédio...</option>' +
+    predios.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+  // Se só tem um prédio, seleciona automaticamente
+  if (predios.length === 1) { sel.value = predios[0].id; carregarCategoriasAdmin(); }
+  // Se tem prédio ativo, seleciona ele
+  else if (predioAtivo) { sel.value = predioAtivo.id; carregarCategoriasAdmin(); }
+}
+
 async function adicionarCategoria() {
   const nome = document.getElementById('cat-nova-nome')?.value.trim();
-  if (!nome) return;
+  const pid  = document.getElementById('cat-predio-sel')?.value;
+  if (!nome) { showToast('Digite o nome da categoria'); return; }
+  if (!pid)  { showToast('Selecione um prédio primeiro'); return; }
   try {
-    await POST('/api/categorias', { nome });
+    const opts = {
+      method: 'POST',
+      headers: { 'Authorization':'Bearer '+token, 'x-predio-id': pid, 'Content-Type':'application/json' },
+      body: JSON.stringify({ nome })
+    };
+    const res = await fetch('/api/categorias', opts);
+    if (!res.ok) throw new Error((await res.json()).erro);
     document.getElementById('cat-nova-nome').value = '';
     await carregarCategoriasAdmin();
     showToast('Categoria adicionada!');
+  } catch(e) { showToast('Erro: '+e.message); }
+}
+
+async function adicionarCategoriaCustom(nome, pid) {
+  try {
+    const opts = {
+      method: 'POST',
+      headers: { 'Authorization':'Bearer '+token, 'x-predio-id': pid, 'Content-Type':'application/json' },
+      body: JSON.stringify({ nome })
+    };
+    await fetch('/api/categorias', opts);
+    await carregarCategoriasAdmin();
+    showToast(`"${nome}" adicionada como categoria personalizada`);
   } catch(e) { showToast('Erro: '+e.message); }
 }
 
