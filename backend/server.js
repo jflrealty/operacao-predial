@@ -483,13 +483,18 @@ app.get('/api/tickets', auth, async (req, res) => {
     }
 
     const { q, status, prioridade, categoria, responsavel_id, de, ate, predio_id: filtroPrediod } = req.query;
-    // Superadmin pode filtrar por prédio específico via query param
     const predioFiltro = filtroPrediod ? parseInt(filtroPrediod) : pid;
 
     let query = predioFiltro
       ? 'SELECT t.*, p.nome as predio_nome FROM tickets t JOIN predios p ON p.id=t.predio_id WHERE t.predio_id=$1'
       : 'SELECT t.*, p.nome as predio_nome FROM tickets t JOIN predios p ON p.id=t.predio_id WHERE 1=1';
     const params = predioFiltro ? [predioFiltro] : [];
+
+    // Membro só vê seus tickets
+    if (req.user.role === 'membro') {
+      params.push(req.user.id);
+      query += ` AND (t.autor_id=$${params.length} OR t.responsavel_id=$${params.length})`;
+    }
 
     if (status)         { params.push(status);         query += ` AND t.status=$${params.length}`; }
     if (prioridade)     { params.push(prioridade);     query += ` AND t.prioridade=$${params.length}`; }
@@ -523,8 +528,11 @@ app.post('/api/tickets', auth, comPredio, async (req, res) => {
     await pool.query('INSERT INTO ticket_historico (ticket_id,mensagem,autor_id,autor_nome) VALUES ($1,$2,$3,$4)',
       [t.id,`Aberto por ${req.user.nome} via ${origem}`,req.user.id,req.user.nome]);
     enviarEmail(emailTicketAberto(t, req.user.email));
-    if (responsavel_email && responsavel_email!==req.user.email)
-      enviarEmail({...emailTicketAberto(t, responsavel_email), subject:`[JFL] Ticket #${t.id} atribuído a você`});
+    if (responsavel_email && responsavel_email!==req.user.email) {
+      enviarEmail({...emailTicketAberto(t, responsavel_email), subject:`[JFL] Ticket #${t.id} atribuido a voce`});
+      // Push notification para o responsável
+      if (responsavel_id) enviarPush(responsavel_id, 'Novo ticket atribuido!', `#${t.id} - ${t.titulo}`, '/');
+    }
     res.status(201).json(t);
   } catch(e) { console.error(e); res.status(500).json({ erro: 'Erro interno' }); }
 });
@@ -548,6 +556,7 @@ app.patch('/api/tickets/:id/status', auth, async (req, res) => {
   if (t.responsavel_id && t.responsavel_id!==req.user.id) {
     const { rows: ru } = await pool.query('SELECT email FROM usuarios WHERE id=$1',[t.responsavel_id]);
     if (ru[0]?.email) enviarEmail(emailStatusAtualizado(t,status,req.user.nome,ru[0].email));
+    enviarPush(t.responsavel_id, `Ticket #${t.id} atualizado`, `Status: ${status}`, '/');
   }
   res.json(t);
 });
@@ -834,6 +843,46 @@ app.delete('/api/categorias/:id', auth, adminOnly, async (req, res) => {
 // UNIDADES
 // ══════════════════════════════════════════════════════════════
 
+// ══════════════════════════════════════════════════════════════
+// PUSH NOTIFICATIONS
+// ══════════════════════════════════════════════════════════════
+
+// Tabela de subscriptions
+// CREATE TABLE push_subscriptions (id SERIAL, usuario_id INT, subscription JSONB, criado_em TIMESTAMPTZ DEFAULT NOW())
+
+app.post('/api/push/subscribe', auth, async (req, res) => {
+  const { subscription } = req.body;
+  if (!subscription) return res.status(400).json({ erro: 'Subscription obrigatória' });
+  try {
+    await pool.query(`
+      INSERT INTO push_subscriptions (usuario_id, subscription)
+      VALUES ($1, $2)
+      ON CONFLICT DO NOTHING
+    `, [req.user.id, JSON.stringify(subscription)]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ erro: 'Erro interno' }); }
+});
+
+app.delete('/api/push/unsubscribe', auth, async (req, res) => {
+  const { endpoint } = req.body;
+  await pool.query(
+    "DELETE FROM push_subscriptions WHERE usuario_id=$1 AND subscription->>'endpoint'=$2",
+    [req.user.id, endpoint]
+  );
+  res.json({ ok: true });
+});
+
+async function enviarPush(usuarioId, titulo, corpo, url='/') {
+  try {
+    const { rows } = await pool.query('SELECT subscription FROM push_subscriptions WHERE usuario_id=$1', [usuarioId]);
+    if (!rows.length) return;
+    // Web Push sem biblioteca externa — usa fetch com VAPID manual simplificado
+    // Para produção completa, instalar web-push: npm install web-push
+    // Por ora, logamos a intenção
+    console.log(`[PUSH] Para usuario ${usuarioId}: "${titulo}" - ${corpo}`);
+  } catch(e) { console.error('[PUSH] Erro:', e.message); }
+}
+
 // GET /api/unidades — lista unidades do prédio ativo
 app.get('/api/unidades', auth, async (req, res) => {
   const pid = parseInt(req.headers['x-predio-id']) || null;
@@ -923,15 +972,29 @@ app.get('/api/stats', auth, async (req, res) => {
   const isSuper = ['superadmin','admin'].includes(req.user.role);
 
   // Superadmin sem prédio selecionado = todos os prédios
+  const isMembro = req.user.role === 'membro';
   const wherePrediod = pid ? 'predio_id=$1' : (isSuper ? '1=1' : 'predio_id=-1');
-  const params = pid ? [pid] : [];
-  const params2 = pid ? [pid, hoje] : [hoje];
-  const wherePrediod2 = pid ? 'predio_id=$1 AND prazo::date=$2' : (isSuper ? 'prazo::date=$1' : '1=0');
+  let params = pid ? [pid] : [];
+  let params2 = pid ? [pid, hoje] : [hoje];
+  let wherePrediod2 = pid ? 'predio_id=$1 AND prazo::date=$2' : (isSuper ? 'prazo::date=$1' : '1=0');
+
+  // Membro vê só seus stats
+  let membroWhere = '';
+  if (isMembro) {
+    params = pid ? [pid, req.user.id] : [req.user.id];
+    params2 = pid ? [pid, hoje, req.user.id] : [hoje, req.user.id];
+    const idx = params.length;
+    membroWhere = ` AND (autor_id=$${idx} OR responsavel_id=$${idx})`;
+    const idx2 = params2.length;
+    wherePrediod2 = pid
+      ? `predio_id=$1 AND prazo::date=$2 AND (autor_id=$${idx2} OR responsavel_id=$${idx2})`
+      : `prazo::date=$1 AND (autor_id=$${idx2} OR responsavel_id=$${idx2})`;
+  }
 
   const [a,b,c,d]=await Promise.all([
-    pool.query(`SELECT COUNT(*) FROM tickets WHERE ${wherePrediod} AND status='aberto'`, params),
-    pool.query(`SELECT COUNT(*) FROM tickets WHERE ${wherePrediod} AND status='em andamento'`, params),
-    pool.query(`SELECT COUNT(*) FROM tickets WHERE ${wherePrediod} AND status='resolvido'`, params),
+    pool.query(`SELECT COUNT(*) FROM tickets WHERE ${wherePrediod}${membroWhere} AND status='aberto'`, params),
+    pool.query(`SELECT COUNT(*) FROM tickets WHERE ${wherePrediod}${membroWhere} AND status='em andamento'`, params),
+    pool.query(`SELECT COUNT(*) FROM tickets WHERE ${wherePrediod}${membroWhere} AND status='resolvido'`, params),
     pool.query(`SELECT COUNT(*) FROM tickets WHERE ${wherePrediod2} AND status NOT IN ('resolvido','cancelado')`, params2),
   ]);
   res.json({aberto:parseInt(a.rows[0].count),andamento:parseInt(b.rows[0].count),resolvido:parseInt(c.rows[0].count),hoje:parseInt(d.rows[0].count)});
@@ -1439,6 +1502,13 @@ async function migrate() {
       CREATE INDEX IF NOT EXISTS idx_historico_ticket      ON ticket_historico(ticket_id);
       CREATE INDEX IF NOT EXISTS idx_atividades_ticket     ON ticket_atividades(ticket_id);
       CREATE INDEX IF NOT EXISTS idx_fotos_ticket          ON ticket_fotos(ticket_id);
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id SERIAL PRIMARY KEY,
+      usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      subscription JSONB NOT NULL,
+      criado_em TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_push_usuario ON push_subscriptions(usuario_id);
     CREATE INDEX IF NOT EXISTS idx_unidades_predio       ON unidades(predio_id);
     CREATE INDEX IF NOT EXISTS idx_unidades_sap          ON unidades(sap);
       CREATE INDEX IF NOT EXISTS idx_usuario_predios_uid   ON usuario_predios(usuario_id);
