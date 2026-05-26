@@ -1430,7 +1430,7 @@ async function openDetail(id) {
         <input type="text" id="escalar-txt-${id}" placeholder="Para qual equipe/area escalar? (ex: Manutencao predial)" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:var(--font);margin-bottom:8px;">
         <button onclick="escalarTicket(${id})" style="background:var(--purple);color:#fff;border:none;padding:8px 16px;border-radius:var(--radius);font-family:var(--font);font-size:13px;cursor:pointer;">Confirmar escalada</button>
       </div>
-      \${currentUser?.role !== 'membro' ? \`<button onclick="document.getElementById('escalar-box-\${id}').style.display=document.getElementById('escalar-box-\${id}').style.display==='none'?'block':'none'" style="margin-top:8px;background:none;border:1px solid var(--purple);color:var(--purple);padding:6px 12px;border-radius:var(--radius);font-family:var(--font);font-size:12px;cursor:pointer;">⚡ Escalar chamado</button>\` : ''}
+      <div id="btn-escalar-${id}"></div>
     </div>
     <div class="divider"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
@@ -1473,6 +1473,11 @@ async function openDetail(id) {
   document.getElementById('detail-body').innerHTML = detailHtml.replaceAll('TICKETID', String(id));
   // Carrega fotos assincronamente após render
   setTimeout(() => carregarFotos(id), 50);
+  // Renderiza botão escalar (não pode ficar em template literal com role check)
+  const btnEscalar = document.getElementById('btn-escalar-'+id);
+  if (btnEscalar && currentUser?.role !== 'membro') {
+    btnEscalar.innerHTML = `<button onclick="document.getElementById('escalar-box-${id}').style.display=document.getElementById('escalar-box-${id}').style.display==='none'?'block':'none'" style="margin-top:8px;background:none;border:1px solid var(--purple);color:var(--purple);padding:6px 12px;border-radius:var(--radius);font-family:var(--font);font-size:12px;cursor:pointer;">⚡ Escalar chamado</button>`;
+  }
 }
 
 async function apagarTicket(id) {
